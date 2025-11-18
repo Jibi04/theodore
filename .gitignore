@@ -1,0 +1,40 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environments
+venv/
+.env/
+*.env
+
+# Logs
+*.log
+logs/
+*.logs/
+
+# IDE settings
+.vscode/
+.idea/
+
+# Byte-compiled / optimized files
+*.egg-info/
+build/
+dist/
+
+# SQLite databases (if generated locally)
+*.db
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+
+# json
+*.json # Ignore all JSON files
+!configs.json # Except configs.json
+
+# cache
+*.cache 
