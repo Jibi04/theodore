@@ -1,5 +1,4 @@
 import click
-from concurrent.futures import ThreadPoolExecutor
 import rich_click as click
 import re, json
 
@@ -7,6 +6,7 @@ from theodore.managers.download_manager import Downloads_manager
 from theodore.managers.configs_manager import Configs_manager
 from theodore.core.logger_setup import base_logger
 from theodore.core.utils import user_success, send_message
+from theodore.core.worker_setup import Queue
 from click_option_group import optgroup, RequiredAnyOptionGroup
 from urllib.parse import urlparse, unquote
 from pathlib import Path
@@ -14,7 +14,6 @@ from pathlib import Path
 # -------------------------------
 #        Helper methods 
 # --------------------------------
-
 def get_full_name(filename):
     base_logger.internal(f'get full name initalized file name: {filename}')
 
@@ -70,22 +69,19 @@ def multi_download(urls, dir_path = None):
         dir_path = load_configs.get('downloads', {}).get('default_location', "~/Videos")
 
     dir_str = Path(dir_path).expanduser().absolute()
-    executor = ThreadPoolExecutor(max_workers=5)
-
     for u in urls:
         url_path_name = Path(unquote(urlparse(u).path)).name
         full_path = dir_str / url_path_name
 
-        executor.submit(download_manager.download_movie, u, full_path, url_path_name)
+        Queue.put((3, (download_manager.download_movie, (u, full_path, url_path_name))))
         movie_configs["downloads"]["movies"].setdefault(url_path_name, {"url": u, "is_downloaded": False})
 
     configs_manager.save_file(movie_configs, movie=True)
-    # executor.shutdown(wait=True)
+    Queue.join()
     return
 # ------------------------------------------
 #             Main Downloads CLI 
 # ------------------------------------------
-
 @click.group()
 @click.pass_context
 def downloads(ctx):
