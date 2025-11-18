@@ -5,15 +5,17 @@ from rich.table import Table
 from pathlib import Path
 from theodore.core.theme import console
 from theodore.core.logger_setup import base_logger, error_logger
+import tempfile
 
 # -------------------------
 # Global Variables 
 # -------------------------
 DATA_DIR = Path(__file__).parent.parent / "data"
 JSON_DIR = DATA_DIR / "json"
+TEMP_DIR = Path(tempfile.gettempdir()) / "theodore_downloads"
+TEMP_DIR.mkdir(parents=True, exist_ok=True)
 JSON_DIR.mkdir(parents=True, exist_ok=True)
 FILE = JSON_DIR / "cache.json"
-
 
 def user_success(msg):
     return base_logger.info(f'[success]{msg}')
@@ -42,8 +44,6 @@ def normalize_ids(task_id = None, task_ids = None):
         except ValueError:
             continue
     return cleaned_ids
-
-
 
 def parse_date(date: str) -> dict:
     date = dateparser.parse(date)
