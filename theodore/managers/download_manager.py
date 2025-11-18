@@ -7,22 +7,13 @@ from requests.exceptions import HTTPError, ConnectionError, ChunkedEncodingError
 import time, sys, json
 from datetime import datetime, timezone
 from fake_user_agent import user_agent
-from theodore.core.utils import send_message, user_success, user_error
-import tempfile
+from theodore.core.utils import send_message, user_success, user_error, TEMP_DIR
 import re
-# Import tqdm for progress bar management
 from tqdm.auto import tqdm
 
 ua = user_agent()
 manager = Configs_manager()
 
-
-# set existence of file as markers for pause, resume or download
-TEMP_DIR = Path(tempfile.gettempdir()) / "theodore_downloads"
-TEMP_DIR.mkdir(parents=True, exist_ok=True)
-
-# TEMP_DIR = Path(__file__).parent.parent / "theodore_temp"
-# TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
 def clean_file(filename) -> str:
     return re.sub(r'[^a-zA-Z0-9.-]', '_', filename)
@@ -81,30 +72,23 @@ class Downloads_manager:
         if not filename:
             filename = filepath.name
 
-        # ----------- Remove stale markers before starting or resuming download --------------
 
         for attempt in range(1, retries + 1):
 
-            # pause_marker_path(filename).unlink(missing_ok=True)
-            # cancel_marker_path(filename).unlink(missing_ok=True)
+            # ---- Remove stale markers before starting or resuming download ----
+            try:
+                base_logger.internal(f"Cleaning markers for: {filename}")
+                pause_marker_path(filename).unlink(missing_ok=True)
+                cancel_marker_path(filename).unlink(missing_ok=True)
+            except Exception as e:
+                user_error(f"MARKER CLEAN ERROR: {e}")
+                raise
 
-            # movies = manager.load_file(movie=True)
-
-            for attempt in range(1, retries + 1):
-
-                try:
-                    base_logger.internal(f"Cleaning markers for: {filename}")
-                    pause_marker_path(filename).unlink(missing_ok=True)
-                    cancel_marker_path(filename).unlink(missing_ok=True)
-                except Exception as e:
-                    user_error(f"MARKER CLEAN ERROR: {e}")
-                    raise
-
-                try:
-                    movies = manager.load_file(movie=True)
-                except Exception as e:
-                    print("LOAD FILE ERROR:", e)
-                    raise
+            try:
+                movies = manager.load_file(movie=True)
+            except Exception as e:
+                print("LOAD FILE ERROR:", e)
+                raise
 
             downloaded_bytes = 0
 
@@ -198,7 +182,7 @@ class Downloads_manager:
                     if e.response.status_code == 416:
                         cls().update_client(filename=filename, movies=movies, filepath=filepath)
                         return
-                    user_error(f"HTTP ERROR: ", err_msg)
+                    user_error(f"HTTP ERROR: {err_msg}")
                     time.sleep(30)
                     if attempt == retries:
                         user_error("Max retries reached. Aborting...")
