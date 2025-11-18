@@ -1,0 +1,40 @@
+[project]
+name = "theodore"
+version = "0.1.0"
+description = "Theodore Hybrid Voice Assistant"
+authors = [
+    {name = "Jibi"}
+]
+license = {text = "None yet"}
+packages = [
+    { include = "theodore" }
+]
+
+[tool.poetry.dependencies]
+python = ">=3.11"
+click = ">=8.3.0,<9.0.0"
+rich = ">=14.2.0,<15.0.0"
+requests = "^2.32.5"
+dotenv = "^0.9.9"
+console = "^0.9912"
+click-option-group = "^0.5.9"
+sqlalchemy = "^2.0.44"
+flask = "^3.1.2"
+dateparser = "^1.2.2"
+numpy = "^2.3.4"
+pandas = "^2.3.3"
+plyer = "^2.1.0"
+schedule = "^1.2.2"
+fake-user-agent = "^2.3.9"
+rich-click = "^1.9.4"
+pyttsx3 = "^2.99"
+vosk = "^0.3.45"
+aiosqlite = "^0.21.0"
+httpx = "^0.28.1"
+
+[tool.poetry.scripts]
+theodore = "theodore.cli.__main__:theodore"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
