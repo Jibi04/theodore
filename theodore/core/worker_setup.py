@@ -1,5 +1,5 @@
 from queue import PriorityQueue
-import threading, json
+import concurrent.futures, json, os
 from theodore.core.utils import JSON_DIR, error_logger
 
 Queue = PriorityQueue()
@@ -28,5 +28,8 @@ def worker():
             Queue.task_done()
 
 # ----------- Create 5 threads --------------
-for _ in range(5):
-    threading.Thread(target=worker, daemon=True).start()
+max_threads = os.cpu_count() * 2
+for _ in range(max_threads):
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as executor:
+        executor.submit(worker)
+    
