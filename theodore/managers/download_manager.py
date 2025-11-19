@@ -73,8 +73,18 @@ class Downloads_manager:
             filename = filepath.name
 
 
-        for attempt in range(1, retries + 1):
+        try:
+            movies = manager.load_file(movie=True)
+        except Exception as e:
+            user_error("LOAD FILE ERROR:", e)
+            raise
 
+        filedata = movies.get('downloads', {}).get('movies', {}).get(filename)
+        if filedata and filedata.get('is_downloaded'):
+            user_success(f'{filename} already downloaded')
+            return send_message(False, message=f'{filename} already downloaded')
+        
+        for attempt in range(1, retries + 1):
             # ---- Remove stale markers before starting or resuming download ----
             try:
                 base_logger.internal(f"Cleaning markers for: {filename}")
@@ -82,13 +92,9 @@ class Downloads_manager:
                 cancel_marker_path(filename).unlink(missing_ok=True)
             except Exception as e:
                 user_error(f"MARKER CLEAN ERROR: {e}")
-                raise
+                return
 
-            try:
-                movies = manager.load_file(movie=True)
-            except Exception as e:
-                print("LOAD FILE ERROR:", e)
-                raise
+
 
             downloaded_bytes = 0
 
@@ -156,7 +162,7 @@ class Downloads_manager:
                                             # ---------- Cancel feature ----------
                                             if cancel_marker.exists():
                                                 user_error(f'Download cancelled for {filename}')
-                                                return send_message(False, message=f'Download cancelled for {filename}')
+                                                return
                                             
                                             f.write(chunk)
                                             # 4. Use t.update() to advance the progress bar
@@ -178,15 +184,20 @@ class Downloads_manager:
                     
                 except HTTPError as e:
                     err_msg = str(e)
+                    code = e.response.status_code
 
-                    if e.response.status_code == 416:
+                    if code == 416:
                         cls().update_client(filename=filename, movies=movies, filepath=filepath)
-                        return
+                        break
+                    if code == 403:
+                        user_error(f'{filename} URL Forbidden')
+                        break
                     user_error(f"HTTP ERROR: {err_msg}")
                     time.sleep(30)
                     if attempt == retries:
                         user_error("Max retries reached. Aborting...")
-                        return send_message(False, message=f"Http Error: {err_msg}")
+                        user_error(f"Http Error: {err_msg}")
+                        return
                     continue
                 except (IncompleteRead, ConnectionError, ReadTimeout, ChunkedEncodingError, ConnectTimeout) as e:
                     print()
@@ -194,7 +205,7 @@ class Downloads_manager:
                     print()
                     if attempt == retries:
                         user_error("Max retries reached, Aborting...")
-                        return send_message(False, message=f'"error": {str(e)}')
+                        return
                     for sec in range(5, 0, -1):
                         sys.stdout.write(f"\rRetrying in {sec} seconds...")
                         sys.stdout.flush()
@@ -203,9 +214,11 @@ class Downloads_manager:
 
                 except Exception as e:
                     user_error(f"Unexpected error: {e}")
-                    return send_message(False, message=f'"error": {str(e)}')
+                    user_error(f'"error": {str(e)}')
+                    return
 
-            return send_message(False, message="Download failed unexpectedly")
+            user_error("Download failed unexpectedly")
+            return
 
 
         
