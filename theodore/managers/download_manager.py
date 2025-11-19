@@ -213,7 +213,6 @@ class Downloads_manager:
                     print()
 
                 except Exception as e:
-                    user_error(f"Unexpected error: {e}")
                     user_error(f'"error": {str(e)}')
                     return
 
