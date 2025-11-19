@@ -47,13 +47,16 @@ class Weather_manager:
             if not location:
                     user_error.error("Unable to fetch no location to query weather data from.")
                     return send_message(False, message='no location')
+        base_logger.debug(f'Location loaded - {location}')
 
         cache = Cache_manager(ttl)
         cache_key = f"{location}:{query}"
         data = cache.get_cache(cache_key)
         if data:
+            base_logger.debug(f'Cache found for {location} data - {data}')
             return send_message(True, data=data, message='this is cache')
 
+        base_logger.internal(f'{cache_key} data expired or not in cache')
         with console.status('Fetching weather data', spinner='arc'):
             for attempt in range(retries + 1):
                 try:
@@ -70,44 +73,48 @@ class Weather_manager:
                     headers = {
                         "User-Agent": ua
                     }
+                    base_logger.debug(f'making {query} request for {location}')
                     async with httpx.AsyncClient(timeout=30) as client:
-                        response = await client.get(url=url,params=params, headers=headers)
+                        base_logger.internal('awaiting response from client')
+                        response = await client.get(url=url, params=params, headers=headers)
+                        base_logger.debug(f'Client request response {response}')
                         response.raise_for_status() 
+                        base_logger.debug('Client didn\'t raise any errors')
                         data = response.json()
-                        
+                        base_logger.debug(f'weather data jsonified {data}')
                 except (ReadTimeout, ConnectionError, ConnectTimeout) as e:
                     if attempt == retries:
                         base_logger.internal(f'{type(e).__name__} error. Aborting...')
                         return send_message(False, message='A server error occurred')
                     time.sleep(1)
                 except httpx.HTTPError:
-                    break
+                    continue
+                except httpx.DecodingError:
+                        base_logger.debug(f"Recieved non json-Response from Serve. {str(e)}")
+                        return send_message(False, message=f"Recieved non json-Response from server {response.status_code}")
                 except Exception as e:
                     base_logger.internal(f'{type(e).__name__} error. Aborting...')
-                    return send_message(False, message=f'A  error occurred') 
-                try:
-                    data = response.json()
-                except requests.exceptions.JSONDecodeError as e:
-                        base_logger.internal("Recieved non json-Response from Server. Aborting...")
-                        user_error(str(e))
-                        return send_message(False, message=f"Recieved non json-Response from server {response.status_code}")
+                    return send_message(False, message=f'A  error occurred')
+            if not data:
+                return send_message(False, message=f'Unable to get weather data for {location}')
+            
+            if 'error' in data:
+                base_logger.internal('An Httpx error occurred getting error message...')
+                error_info = data['error']
+                error_code = error_info.get("code", "N/A")
+                error_message = error_info.get("message", "Unknown API Error.")
 
-                if 'error' in data:
-                    base_logger.internal('An error occurred getting error message...')
-                    error_info = data['error']
-                    error_code = error_info.get("code", "N/A")
-                    error_message = error_info.get("message", "Unknown API Error.")
-
-                    if error_code in (1002, 2006):
-                        final_message = "API key error - Confirm weather-api-key in environment variable"
-                    elif error_code == 1006:
-                        final_message = f"No location found matching '{location}'."
-                    else:
-                        final_message = f"{error_code} - {error_message}"
-                    return send_message(False, message=f"[red bold][!] An API error occurred:[/red bold] {final_message}")
-                
-                cache.set_cache(cache_key, data)
-                return send_message(True, data=data)
+                if error_code in (1002, 2006):
+                    final_message = "API key error - Confirm weather-api-key in environment variable"
+                elif error_code == 1006:
+                    final_message = f"No location found matching '{location}'."
+                else:
+                    final_message = f"{error_code} - {error_message}"
+                return send_message(False, message=f"[red bold][!] An API error occurred:[/red bold] {final_message}")
+        
+            base_logger.debug(f'creating new cache-object {cache_key} value {data}')
+            cache.set_cache(cache_key, data)
+            return send_message(True, data=data)
         
 
     def get_current_weather_table(self, data, temp = "c", speed= 'kph'):
