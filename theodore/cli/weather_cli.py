@@ -33,11 +33,10 @@ def current(ctx, temp, location, clear_cache, speed):
         ttl = 0
 
     response = asyncio.run(weather_manager.make_request(query='forecast', location=location, retries=4, ttl=ttl))
-    message = response.get('message')
+    message = response.get('message', "no weather report returned")
     
 
     if not response.get('ok'):
-        base_logger.internal(f"Failed Aborting")
         user_error(message)
         return
     
@@ -66,7 +65,7 @@ def forecast(ctx, temp, location, clear_cache):
         ttl = 0
 
     response = asyncio.run(weather_manager.make_request(location=location, retries=4, ttl=ttl))
-    message = response.get('message')
+    message = response.get('message', 'Unable to get forecast information')
     if not response.get('ok'):
         base_logger.internal(f"Failed Aborting")
         user_error(message)
@@ -109,7 +108,7 @@ def alerts(ctx, location, clear_cache):
         return
     
     base_logger.internal('getting data from response')
-    data = response.get("data")
+    data = response.get("data", {})
 
 
     base_logger.internal('getting table from weather forcast table')
