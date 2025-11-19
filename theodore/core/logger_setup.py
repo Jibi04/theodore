@@ -34,7 +34,7 @@ def get_logger(name, log_file: str | None = None) -> logging.Logger:
 
     # ----------- Httpx showing unwanted logs ------------
     for noisy in ["httpx", "urllib3"]:
-        logging.getLogger(noisy).setLevel(logging.CRITICAL)
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
@@ -44,7 +44,7 @@ def get_logger(name, log_file: str | None = None) -> logging.Logger:
         return logger
 
     formatter = logging.Formatter(
-    fmt="%(asctime)s [%(levelname)-8s - %(name)-10s] - %(lineno)4d - %(message)s",
+    fmt="%(asctime)s [%(levelname)-8s - %(name)-10s] - %(funcName)-16s - %(lineno)4d - %(message)s",
     datefmt="%Y/%m/%d %H:%M:%S"
     )
 
@@ -60,14 +60,14 @@ def get_logger(name, log_file: str | None = None) -> logging.Logger:
     logger.addHandler(rich_handler)
 
     # ------------- File Logs ----------------
-    file_handler = RotatingFileHandler(FILE_PATH, encoding="utf-8", backupCount=3, maxBytes=2*1024*1024)
+    file_handler = RotatingFileHandler(FILE_PATH, encoding="utf-8", backupCount=3, maxBytes=5*1024*1024)
     file_handler.setFormatter(formatter)
     file_handler.setLevel(logging.DEBUG)  # INTERNAL logs included
     logger.addHandler(file_handler)
 
     logger.propagate = False
-    return logger
+    return logger, FILE_PATH
 
 
-base_logger = get_logger("theodore", "theodore.log")
-error_logger = get_logger("theodore.errors", "errors.log")
+base_logger, main_logger_file= get_logger("theodore", "theodore.log")
+error_logger, error_logger_file = get_logger("theodore.errors", "theodore.log")
