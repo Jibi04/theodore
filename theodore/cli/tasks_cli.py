@@ -50,7 +50,7 @@ def new(ctx, title, description, status, due, remind):
         response = asyncio.run(manager.new_task(**args_map))
 
         base_logger.internal('getting message from response')
-        msg = response.get('message')
+        msg = response.get('message', "Couldn't create new task")
 
 
         if not response.get('ok'):
@@ -58,7 +58,7 @@ def new(ctx, title, description, status, due, remind):
             return
         
         base_logger.internal('getting newly created task object from manager')
-        task = response.get('data')
+        task = response.get('data', {})
 
         user_success(msg)
         base_logger.debug(f"new task created task-obj: {task}")
@@ -114,7 +114,7 @@ def update(ctx, **kwargs):
         response = asyncio.run(manager.update_task(**args_map))
 
         base_logger.internal('getting message from response')
-        msg = response.get('message')
+        msg = response.get('message', "No message was recieved from update manager")
         if not response.get('ok'):
             user_error(msg)
             return
@@ -263,7 +263,7 @@ def delete(ctx, **kwargs):
         
         base_logger.internal(f'deleting {args_map} ... waiting for response from manager')
         response = asyncio.run(manager.delete_task(**args_map))
-        msg = response.get('message', 'An unknown error occurred')
+        msg = response.get('message', 'An unknown error occurred with delete manager')
     except Exception as e:
         base_logger.internal('An unknown error occurred Aborting ...')
         user_error(f"{type(e).__name__}: {e}")
@@ -292,7 +292,7 @@ def restore(ctx, ids, **kwargs):
         base_logger.internal(f'restoring trash {args_map} ... waiting for response from manager')
         response = asyncio.run(manager.restore_from_trash(**args_map))
         base_logger.internal('getting task response')
-        msg = response.get('message', 'An unknown error occurred')
+        msg = response.get('message', 'An unknown error occurred. Unable to restore')
     except Exception as e:
         base_logger.internal('An unknown error occurred Aborting ...')
         user_error(f"{type(e).__name__}: {e}")
