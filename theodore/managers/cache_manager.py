@@ -5,6 +5,7 @@ from datetime import datetime
 
 from pathlib import Path
 from theodore.core.utils import send_message, DATA_DIR, local_tz
+from theodore.core.logger_setup import base_logger
 
 
 CACHE_DIR = DATA_DIR / "cache"
@@ -39,17 +40,31 @@ class Cache_manager:
     def get_cache(self, key):
         if not self.cache:
             return None
-
+        
+        base_logger.internal('Loading cache file')
         key = key.lower()
-        entry = self.cache.get(key)
+        entry = self.cache.get(key, None)
 
         if not entry:
-            return None
+            base_logger.debug(f'Cache manager returned {entry}')
+            return
 
-        if time.time() - entry['Timestamp'] > self.ttl:
-            return None
+        base_logger.internal('filtering recent cache data')
+        old_time = entry['ttl_stamp']
+        new_time = time.monotonic()
+        time_difference = new_time - old_time
+
+        if time_difference > self.ttl:
+            base_logger.debug(f"No unexpired data from timeline {time_difference} > {self.ttl}")
+            return
         
-        return entry['data']
+        weather_data = entry['data']
+        base_logger.debug(f"Cache manager returned {weather_data}")
+        return weather_data
+    
+    def clear_cache(self):
+        self.cache = {}
+        return
     
     def set_cache(self, key, data):
         key = key.lower()
@@ -58,7 +73,7 @@ class Cache_manager:
             if key in self.cache:
                 self.cache[key]['data'].update(data)
             else:
-                self.cache[key] = {"Timestamp": time.time(), "timestamp": datetime.now(local_tz).isoformat(), f"data": data}
+                self.cache[key] = {"ttl_stamp": time.monotonic(), "timestamp": datetime.now(local_tz).isoformat(), f"data": data}
             
             self._save_cache()
             return send_message(True, message='Cache created')
