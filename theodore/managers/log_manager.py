@@ -42,7 +42,7 @@ class Log_manager:
                 # Step 3. set position of pointer at raw_end
                 f.seek(raw_end)
 
-                # set pointer to a safe new line
+                # adjust pointer to a safe new line
                 # Note: readline() reads until a newline '\n'
                 tail_end = f.readline(1024 * 8) # read up to 8kb find the next line
 
@@ -57,13 +57,13 @@ class Log_manager:
                     chunk_ranges.append((current_start, filesize))
                     break
                 
-                # get a safe current position of pointer
+                # get a safe-current position of pointer
                 safe_end = f.tell()
 
                 # append position to list
                 chunk_ranges.append((current_start, safe_end))
 
-                # set new position
+                # update current start
                 current_start = safe_end 
         return chunk_ranges
 

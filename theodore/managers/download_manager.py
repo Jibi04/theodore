@@ -1,15 +1,14 @@
-from theodore.core.logger_setup import base_logger
-from theodore.managers.configs_manager import Configs_manager
 import requests
+import time, sys, json, re
+from theodore.managers.configs_manager import Configs_manager
 from pathlib import Path
 from http.client import IncompleteRead
 from requests.exceptions import HTTPError, ConnectionError, ChunkedEncodingError, ConnectTimeout, ReadTimeout
-import time, sys, json
 from datetime import datetime, timezone
+from tqdm.auto import tqdm
 from fake_user_agent import user_agent
 from theodore.core.utils import send_message, user_success, user_error, TEMP_DIR, local_tz
-import re
-from tqdm.auto import tqdm
+from theodore.core.logger_setup import base_logger
 
 ua = user_agent()
 manager = Configs_manager()
@@ -151,6 +150,9 @@ class Downloads_manager:
 
                                             # ---------- Cancel feature ----------
                                             if cancel_marker.exists():
+                                                if movies.get('downloads', {}).get('movies', {}).get(filename, None):
+                                                    movies["downloads"]["movies"].pop(filename)
+                                                    manager.save_file(movies, movie=True)
                                                 user_error(f'Download cancelled for {filename}')
                                                 return
                                             
