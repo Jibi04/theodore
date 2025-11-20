@@ -4,9 +4,10 @@ import rich_click as click
 from theodore.core.theme import cli_defaults
 from theodore.core.logger_setup import base_logger
 from theodore.cli.config_cli import config
-from theodore.cli.tasks_cli import task_manager, file_manager
+from theodore.cli.tasks_cli import task_manager
 from theodore.cli.weather_cli import weather
 from theodore.cli.download_cli import downloads
+from theodore.cli.file_cli import file_manager
 from theodore.tests.tasks_test import tasks_test
 from theodore.managers.file_manager import File_manager
 from theodore.managers.download_manager import Downloads_manager
@@ -51,6 +52,7 @@ theodore.add_command(task_manager, name="tasks")
 theodore.add_command(weather, name='weather')
 theodore.add_command(config, name="configs")
 theodore.add_command(downloads, name="download")
+theodore.add_command(file_manager, name="files")
 
 if __name__ == "__main__":
     theodore()
