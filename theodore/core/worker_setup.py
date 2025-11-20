@@ -1,35 +1,44 @@
-from queue import PriorityQueue
-import threading, json, os
-from theodore.core.utils import JSON_DIR, error_logger, local_tz
+import asyncio
+from sqlalchemy import insert
+from asyncio import PriorityQueue as AsyncPriorityQueue
+from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime
 
-Queue = PriorityQueue()
+from theodore.models.base import engine
+from theodore.core.utils import user_error, local_tz
+from theodore.models.file import Queues
 
-worker_json = JSON_DIR / "worker.json"
-def load_worker_json():
-    try:
-        worker_results = json.loads(worker_json.read_text())
-        return worker_results
-    except (OSError, json.JSONDecodeError):
-        return {}
+Queue = AsyncPriorityQueue()
 
-def worker():
+async def worker():
     while True:
-        _, (func, args) = Queue.get()
+        _, (func, args) = await Queue.get()
 
         try:
-            results = load_worker_json()
+            async with engine.begin() as conn:
 
-            results[f"{func.__name__}:{args}"] = func(*args)
-            results[f"{func.__name__}:{args}"].setdefault('timestamp', datetime.now(local_tz).isoformat())
-
-            worker_json.write_text(json.dumps(results, indent=4))
+                response = func(*args)
+                query = insert(Queues)
+                if response:
+                    message= response.get('message')
+                    data = response.get('data', {})
+                    date = response.get('date', datetime.now(local_tz))
+                    query = query.values(func_name=func.__name__, args=args, message=message, data=data, date=date)
+                else: query = query.values(func_name=func.__name__, args=args, date=datetime.now(local_tz))
+                
+                await conn.execute(query)
+        except SQLAlchemyError as exc:
+            user_error(str(exc))
         except Exception as e:
-            error_logger.error(f"Worker Failed: {type(e).__name__}: {str(e)}")
+            user_error(f"Worker Failed: {type(e).__name__}: {str(e)}")
         finally:
             Queue.task_done()
 
-# ----------- Create 5 threads --------------
-max_threads = os.cpu_count() * 2
-for _ in range(max_threads):
-    threading.Thread(target=worker, daemon=True).start()
+async def start_workers(num_workers):
+    for _ in range(num_workers):
+        asyncio.create_task(worker())
+    
+    await Queue.join()
+
+async def put_new_task(priority, funcname, args):
+    await Queue.put((priority, (funcname, args)))
