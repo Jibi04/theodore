@@ -1,4 +1,4 @@
-import click
+import click, os, asyncio
 import rich_click as click
 
 from theodore.core.theme import cli_defaults
@@ -9,6 +9,7 @@ from theodore.cli.weather_cli import weather
 from theodore.cli.download_cli import downloads
 from theodore.cli.file_cli import file_manager
 from theodore.tests.tasks_test import tasks_test
+from theodore.core.worker_setup import start_workers
 from theodore.managers.file_manager import File_manager
 from theodore.managers.download_manager import Downloads_manager
 from theodore.managers.tasks_manager import Task_manager
@@ -32,7 +33,7 @@ def theodore(ctx, verbose):
     ctx.obj['task_manager'] = Task_manager()
     ctx.obj['config_manager'] = Configs_manager()
     ctx.obj['weather_manager'] = Weather_manager()
-    ctx.obj['download_manager'] = Downloads_manager()
+    ctx.obj['download_manager'] = Downloads_manager
     ctx.obj['file_manager'] = File_manager()
 
     base_logger.internal("Theodore Initalized")
@@ -41,6 +42,17 @@ def theodore(ctx, verbose):
 @click.pass_context
 def tests(ctx):
     """Test out CLI commands"""
+
+def AsyncRunner():
+    try:
+        worker_task = asyncio.create_task(start_workers(10))
+
+        theodore.main(standalone_mode=False)
+    except Exception as e:
+        print(f'An Error occurred in the AsyncRunner {type(e).__name__}: {str(e)}')
+    finally:
+        worker_task.cancel()
+
 
     
 
@@ -55,4 +67,4 @@ theodore.add_command(downloads, name="download")
 theodore.add_command(file_manager, name="files")
 
 if __name__ == "__main__":
-    theodore()
+    asyncio.run(AsyncRunner())
