@@ -29,7 +29,7 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 FILE_PATH = CACHE_DIR / 'dummy.cache'
 
 class Weather_manager:
-    async def make_request(self, query, location: str = None, retries: int =3, ttl: int = None):
+    async def make_request(self, query, location: str = None, retries: int =3, clear_cache = False):
         """Make weather request from the weather API 
 
         - headers: special key_word headers you'd like to add
@@ -49,15 +49,21 @@ class Weather_manager:
                     return send_message(False, message='no location')
         base_logger.debug(f'Location loaded - {location}')
 
+        ttl = 60 * 30
         cache = Cache_manager(ttl)
+
+        if clear_cache:
+            cache.clear_cache()
+
+
         cache_key = f"{location}:{query}"
         data = cache.get_cache(cache_key)
         if data:
             base_logger.debug(f'Cache found for {location} data - {data}')
             return send_message(True, data=data, message='this is cache')
 
-        base_logger.internal(f'{cache_key} data expired or not in cache')
-        with console.status('Fetching weather data', spinner='arc'):
+        base_logger.internal(f'\'{cache_key}\' data expired or not in cache. cache-response \'{data}\'')
+        with console.status(f'Fetching weather data for {location.capitalize()}', spinner='arc'):
             for attempt in range(retries + 1):
                 try:
                     API_KEY  = os.getenv('weather_api_key')
@@ -117,7 +123,7 @@ class Weather_manager:
             return send_message(True, data=data)
         
 
-    def get_current_weather_table(self, data, temp = "c", speed= 'kph'):
+    def get_current_weather_table(self, data, temp = None, speed= None):
 
         """Table designed to show beautiful display weather condition summary"""
 
@@ -143,7 +149,7 @@ class Weather_manager:
         return table
 
 
-    def get_weather_forecast_table(self, data, temp='f', speed='km'):
+    def get_weather_forecast_table(self, data, temp= None, speed=None):
         forecast = data.get('forecast', {}).get('forecastday', [])[0]
         if not forecast:
             return "No forecasts at this time"

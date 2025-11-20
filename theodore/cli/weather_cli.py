@@ -16,23 +16,17 @@ def weather(ctx):
 @weather.command()
 @click.option("--location", "-l", type=str, help="You may pass lat and lon, zipcode, postcode, city name, IP, etc")
 @click.option("--temp", type=click.Choice(["f", "c"]), default="c", help="weather condition in temperature metric")
-@click.option("--speed", type=click.Choice(['m', 'miles', 'km']), default='km', help='Filter weather table')
+@click.option("--speed", type=click.Choice(['mph', 'miles', 'kph']), default='kph', help='Filter weather table')
 @click.option("--clear-cache", "-clr", is_flag=True)
 @click.pass_context
-def current(ctx, temp, location, clear_cache, speed):
+def current(ctx, temp, speed, **kwargs):
     """Get live weather updates around you"""
     
     base_logger.internal('Getting weather manager')
     weather_manager = ctx.obj['weather_manager']
 
     base_logger.internal('Calling make request call')
-
-    ttl = 23456
-
-    if clear_cache:
-        ttl = 0
-
-    response = asyncio.run(weather_manager.make_request(query='forecast', location=location, retries=4, ttl=ttl))
+    response = asyncio.run(weather_manager.make_request(query='forecast', **kwargs))
     message = response.get('message', "no weather report returned")
     
 
@@ -41,6 +35,8 @@ def current(ctx, temp, location, clear_cache, speed):
         return
     
     data = response.get("data")
+    temp = kwargs.get('temp')
+    speed = kwargs.get('speed')
 
     table = weather_manager.get_current_weather_table(data, temp=temp, speed=speed)
 
@@ -60,7 +56,7 @@ def forecast(ctx, temp, location, clear_cache):
 
     base_logger.internal('Calling make request call')
 
-    ttl = 23456
+    ttl = 234567
     if clear_cache:
         ttl = 0
 
@@ -96,7 +92,7 @@ def alerts(ctx, location, clear_cache):
 
     base_logger.internal('Calling make request call')
 
-    ttl = 23456
+    ttl = 234567
     if clear_cache:
         ttl = 0
 
