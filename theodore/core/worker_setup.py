@@ -1,6 +1,7 @@
 from queue import PriorityQueue
 import threading, json, os
-from theodore.core.utils import JSON_DIR, error_logger
+from theodore.core.utils import JSON_DIR, error_logger, local_tz
+from datetime import datetime
 
 Queue = PriorityQueue()
 
@@ -20,6 +21,7 @@ def worker():
             results = load_worker_json()
 
             results[f"{func.__name__}:{args}"] = func(*args)
+            results[f"{func.__name__}:{args}"].setdefault('timestamp', datetime.now(local_tz).isoformat())
 
             worker_json.write_text(json.dumps(results, indent=4))
         except Exception as e:

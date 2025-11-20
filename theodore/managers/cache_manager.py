@@ -1,15 +1,17 @@
 import json
 import time
+from datetime import datetime
+
 
 from pathlib import Path
-from theodore.core.utils import send_message, DATA_DIR
+from theodore.core.utils import send_message, DATA_DIR, local_tz
 
 
 CACHE_DIR = DATA_DIR / "cache"
 
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-FILE_PATH = CACHE_DIR / 'weather_cache.cache'
+FILE_PATH = CACHE_DIR / 'weather.cache'
 
 
 class Cache_manager:
@@ -44,18 +46,21 @@ class Cache_manager:
         if not entry:
             return None
 
-        if time.time() - entry['timestamp'] > self.ttl:
+        if time.time() - entry['Timestamp'] > self.ttl:
             return None
         
         return entry['data']
     
     def set_cache(self, key, data):
         key = key.lower()
+        try:
 
-        if key in self.cache:
-            self.cache[key]['data'].update(data)
-        else:
-            self.cache[key] = {"timestamp": time.time(), f"data": data}
-        
-        self._save_cache()
-        return send_message(True, message='Cache created')
+            if key in self.cache:
+                self.cache[key]['data'].update(data)
+            else:
+                self.cache[key] = {"Timestamp": time.time(), "timestamp": datetime.now(local_tz).isoformat(), f"data": data}
+            
+            self._save_cache()
+            return send_message(True, message='Cache created')
+        except json.JSONDecodeError as e:
+            return send_message(False, message=f"A Json decode error occured {str(e)}")

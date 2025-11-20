@@ -7,7 +7,7 @@ from requests.exceptions import HTTPError, ConnectionError, ChunkedEncodingError
 import time, sys, json
 from datetime import datetime, timezone
 from fake_user_agent import user_agent
-from theodore.core.utils import send_message, user_success, user_error, TEMP_DIR
+from theodore.core.utils import send_message, user_success, user_error, TEMP_DIR, local_tz
 import re
 from tqdm.auto import tqdm
 
@@ -49,12 +49,12 @@ class Downloads_manager:
     def update_client(self, filename, movies:dict, filepath):
         movies.setdefault('downloads', {})
         movies['downloads'].setdefault('movies', {})
-        movies['downloads']['movies'].setdefault(filename, {})
+        movies['movies'].setdefault(filename, {})
 
         movies['downloads']['movies'][filename].update(
             {
                 "is_downloaded": True,
-                "date_downloaded": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(local_tz).isoformat(),
                 "filepath": str(filepath)
                 })
         
@@ -65,13 +65,11 @@ class Downloads_manager:
     def download_movie(cls, url, filepath, filename=None, chunksize=8192, retries=10):
 
         filepath = Path(filepath).expanduser()
-        
         base_logger.internal('Preparing file directory for download')
         filepath.parent.mkdir(parents=True, exist_ok=True)
 
         if not filename:
             filename = filepath.name
-
 
         try:
             movies = manager.load_file(movie=True)
@@ -93,9 +91,6 @@ class Downloads_manager:
             except Exception as e:
                 user_error(f"MARKER CLEAN ERROR: {e}")
                 return
-
-
-
             downloaded_bytes = 0
 
             # -------- Resume feature ---------
@@ -111,7 +106,9 @@ class Downloads_manager:
             with requests.Session() as session:
                 session.headers.update({"User-Agent": ua})
                 try:
-                    user_success(f'Attempt {attempt}/{retries}: starting request')
+                    message = f'Downloading {filepath.stem} Attempt {attempt}/{retries}' \
+                          if attempt < 2 else f'Attempt {attempt}/{retries}: restarting download'
+                    user_success(message)
                     with session.get(url, stream=True, headers=headers, timeout=30) as r:
                         r.raise_for_status()
                         code = r.status_code
@@ -133,13 +130,6 @@ class Downloads_manager:
                         if downloaded_bytes < expected_total and expected_total > 0:
                             total_size = expected_total  # This is the total file size
 
-                            # 3. Initialize tqdm bar
-                            # initial: start from the previously downloaded bytes (for resume)
-                            # total: the total expected size
-                            # desc: label for the bar (using filename)
-                            # unit: bytes
-                            # unit_scale: True for B, KB, MB, etc.
-                            # disable: only disable if total_size is 0 (optional)
                             with tqdm(
                                 initial=downloaded_bytes,
                                 total=total_size,
@@ -183,29 +173,32 @@ class Downloads_manager:
                                 return
                     
                 except HTTPError as e:
-                    err_msg = str(e)
-                    code = e.response.status_code
-
-                    if code == 416:
-                        cls().update_client(filename=filename, movies=movies, filepath=filepath)
-                        break
-                    if code == 403:
-                        user_error(f'{filename} URL Forbidden')
-                        break
-                    user_error(f"HTTP ERROR: {err_msg}")
-                    time.sleep(30)
                     if attempt == retries:
                         user_error("Max retries reached. Aborting...")
                         user_error(f"Http Error: {err_msg}")
                         return
+                    code = e.response.status_code
+                    if code == 403:
+                        user_error(f'{filename} URL Forbidden')
+                        if movies.get('downloads', {}).get('movies', {}).get(filename, None):
+                            movies["downloads"]["movies"].pop(filename)
+                            manager.save_file(movies, movie=True)
+                        return
+                    err_msg = f"{type(e).__name__}: {filename} restarting download"
+                    if code == 416:
+                        cls().update_client(filename=filename, movies=movies, filepath=filepath)
+                        break
+                    user_error(err_msg)
+                    time.sleep(30)
                     continue
+
                 except (IncompleteRead, ConnectionError, ReadTimeout, ChunkedEncodingError, ConnectTimeout) as e:
-                    print()
-                    user_error(f"{type(e).__name__}: {str(e)}")
                     print()
                     if attempt == retries:
                         user_error("Max retries reached, Aborting...")
                         return
+                    user_error(f"{type(e).__name__}: {filename} restarting download")
+                    print()
                     for sec in range(5, 0, -1):
                         sys.stdout.write(f"\rRetrying in {sec} seconds...")
                         sys.stdout.flush()
@@ -216,8 +209,8 @@ class Downloads_manager:
                     user_error(f'"error": {str(e)}')
                     return
 
-            user_error("Download failed unexpectedly")
-            return
+        user_error("Download failed unexpectedly")
+        return
 
 
         
