@@ -1,15 +1,18 @@
 import dateparser 
-import json
+import json, re
 from datetime import datetime
 from rich.table import Table
 from pathlib import Path
 from theodore.core.theme import console
 from theodore.core.logger_setup import base_logger, error_logger
 import tempfile
+from zoneinfo import ZoneInfo
+
 
 # -------------------------
 # Global Variables 
 # -------------------------
+local_tz = ZoneInfo("GMT")
 DATA_DIR = Path(__file__).parent.parent / "data"
 JSON_DIR = DATA_DIR / "json"
 TEMP_DIR = Path(tempfile.gettempdir()) / "theodore_downloads"
@@ -36,7 +39,7 @@ def normalize_ids(task_id = None, task_ids = None):
     ids = []
 
     if task_id: ids.append(task_id)
-    if task_ids: ids.extend(task_ids.split(','))
+    if task_ids: ids.extend(re.split(r'\D+', task_ids))
     cleaned_ids = []
     for val in ids:
         try:
@@ -51,7 +54,6 @@ def parse_date(date: str) -> dict:
         message = 'unable to parse date'
         return send_message(False, message)
     return send_message(True, 'Date Parsed', date=date)
-
 
 def get_task_table(data, deleted=False):
     table = Table()
