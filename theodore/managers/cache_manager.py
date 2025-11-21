@@ -8,7 +8,7 @@ from sqlalchemy import select, update, insert
 from sqlalchemy.exc import SQLAlchemyError
 from theodore.models.base import engine
 from theodore.models.file import File_logs
-from theodore.models.weather import Weather, Alerts, Forecasts
+from theodore.models.weather import Current, Alerts, Forecasts
 from theodore.core.utils import send_message, DATA_DIR, local_tz
 from theodore.core.logger_setup import base_logger
 
@@ -26,7 +26,7 @@ class Cache_manager:
     async def load_cache(self, current=False, alerts=False, forecasts=False, file_logs=False) -> Dict:
         try:
             async with engine.begin() as conn:
-                if current: query = select(Weather)
+                if current: query = select(Current)
                 if alerts: query = select(Alerts)
                 if forecasts: query = select(Forecasts)
                 if file_logs: query = select(File_logs)
@@ -46,7 +46,7 @@ class Cache_manager:
                     db_response = await conn.execute(query, values)
                 else:
                     if not data: return send_message(False, message="Cannot create cache, no values to insert")
-                    if current: query = insert(Weather).values(**data)
+                    if current: query = insert(Current).values(**data)
                     if alerts: query = insert(Alerts).values(**data)
                     if forecasts: query = insert(Forecasts).values(**data)
                     if file_logs: query = insert(File_logs).values(**data)
@@ -67,7 +67,7 @@ class Cache_manager:
                     db_response = await conn.execute(query, values)
                 else:
                     if not data: return send_message(False, message="Cannot update cache, no values to update")
-                    if current: query = insert(Weather).values(**data)
+                    if current: query = insert(Current).values(**data)
                     if alerts: query = insert(Alerts).values(**data)
                     if forecasts: query = insert(Forecasts).values(**data)
                     if file_logs: query = insert(File_logs).values(**data)

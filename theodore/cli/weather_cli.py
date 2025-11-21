@@ -19,64 +19,65 @@ def weather(ctx):
 @click.option("--speed", type=click.Choice(['mph', 'miles', 'kph']), default='kph', help='Filter weather table')
 @click.option("--clear-cache", "-clr", is_flag=True)
 @click.pass_context
-def current(ctx, temp, speed, **kwargs):
+async def current(ctx, temp, speed, **kwargs):
     """Get live weather updates around you"""
-    
-    base_logger.internal('Getting weather manager')
-    weather_manager = ctx.obj['weather_manager']
+    try:
+        
+        base_logger.internal('Getting weather manager')
+        weather_manager = ctx.obj['weather_manager']
 
-    base_logger.internal('Calling make request call')
-    response = asyncio.run(weather_manager.make_request(query='forecast', **kwargs))
-    message = response.get('message', "no weather report returned")
+        base_logger.internal('Calling make request call')
+        response = await weather_manager.make_request(query='forecast', **kwargs)
+        message = response.get('message', "no weather report returned")
     
 
-    if not response.get('ok'):
-        user_error(message)
+        if not response.get('ok'): return user_error(message)
+    
+        data = response.get("data")
+        temp = kwargs.get('temp')
+        speed = kwargs.get('speed')
+
+        table = weather_manager.get_current_weather_table(data, temp=temp, speed=speed)
+
+        console.print(table)
         return
-    
-    data = response.get("data")
-    temp = kwargs.get('temp')
-    speed = kwargs.get('speed')
+    except Exception as e:
+        user_error(f"An error occurred with Current weather {type(e).___name__}: {str(e)}")
+        return
 
-    table = weather_manager.get_current_weather_table(data, temp=temp, speed=speed)
-
-    console.print(table)
-
-    return
 
 @weather.command()
 @click.option("--temp", type=click.Choice(["f", "c"]), default="f", help="weather condition in temperature metric")
 @click.option("--location", "-l", type=str, help="You may pass lat and lon, zipcode, postcode, city name, IP, etc")
 @click.option("--clear-cache", "-clr", is_flag=True)
 @click.pass_context
-def forecast(ctx, temp, location, clear_cache):
+async def forecast(ctx, temp, location, clear_cache):
     """Get future weather update up to 7 day forecasts"""
-    base_logger.internal('Getting weather manager')
-    weather_manager = ctx.obj['weather_manager']
+    try:
+        base_logger.internal('Getting weather manager')
+        weather_manager = ctx.obj['weather_manager']
 
-    base_logger.internal('Calling make request call')
+        base_logger.internal('Calling make request call')
 
-    ttl = 234567
-    if clear_cache:
-        ttl = 0
+        response = await weather_manager.make_request(location=location, retries=4)
+        message = response.get('message', 'Unable to get forecast information')
+        if not response.get('ok'):
+            base_logger.internal(f"Failed Aborting")
+            user_error(message)
+            return
+        
+        base_logger.internal('getting data from response')
+        data = response.get("data")
 
-    response = asyncio.run(weather_manager.make_request(location=location, retries=4, ttl=ttl))
-    message = response.get('message', 'Unable to get forecast information')
-    if not response.get('ok'):
-        base_logger.internal(f"Failed Aborting")
-        user_error(message)
+        base_logger.internal('getting table from weather forcast table')
+        table = weather_manager.get_weather_forecast_table(data, temp)
+
+        base_logger.internal('printing table')
+        console.print(table)
         return
-    
-    base_logger.internal('getting data from response')
-    data = response.get("data")
-
-    base_logger.internal('getting table from weather forcast table')
-    table = weather_manager.get_weather_forecast_table(data, temp)
-
-    base_logger.internal('printing table')
-    console.print(table)
-
-    return
+    except Exception as e:
+        user_error(f"An error occurred with Current weather {type(e).___name__}: {str(e)}")
+        return
 
 # # def history(ctx, F, C, location, date):
 # #      """Get weather history of location"
@@ -85,18 +86,14 @@ def forecast(ctx, temp, location, clear_cache):
 @click.option("--location", "-l", type=str, help="You may pass lat and lon, zipcode, postcode, city name, IP, etc")
 @click.option("--clear-cache", "-clr", is_flag=True)
 @click.pass_context
-def alerts(ctx, location, clear_cache):
+async def alerts(ctx, location, clear_cache):
     """Get alert for weather conditions around you"""
     base_logger.internal('Getting weather manager')
     weather_manager = ctx.obj['weather_manager']
 
     base_logger.internal('Calling make request call')
 
-    ttl = 234567
-    if clear_cache:
-        ttl = 0
-
-    response = asyncio.run(weather_manager.make_request(query='alerts', location=location, retries=4, ttl=ttl))
+    response = await weather_manager.make_request(query='alerts', location=location, retries=4)
     message = response.get('message')
     if not response.get('ok'):
         base_logger.internal(f"Failed Aborting")
@@ -105,12 +102,9 @@ def alerts(ctx, location, clear_cache):
     
     base_logger.internal('getting data from response')
     data = response.get("data", {})
-
-
     base_logger.internal('getting table from weather forcast table')
     table = weather_manager.get_weather_alerts_table(data)
 
     base_logger.internal('printing table')
     console.print(table)
-
     return

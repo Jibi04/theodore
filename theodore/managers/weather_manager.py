@@ -10,7 +10,7 @@ from theodore.core.utils import send_message, DATA_DIR, user_error
 from theodore.models.base import engine
 from theodore.managers.configs_manager import Configs_manager
 from theodore.managers.cache_manager import Cache_manager
-from httpx import ConnectionError, ConnectTimeout, ReadTimeout, ReadError, DecodingError
+from httpx import ConnectTimeout, ReadTimeout, ReadError, DecodingError
 
 
 load_dotenv()
@@ -84,7 +84,7 @@ class Weather_manager:
                         base_logger.debug('Client didn\'t raise any errors')
                         data = response.json()
                         base_logger.debug(f'weather data jsonified {data}')
-                except (ConnectionError, ConnectTimeout, ReadTimeout, ReadError,) as e:
+                except (ConnectTimeout, ReadTimeout, ReadError,) as e:
                     if attempt == retries:
                         base_logger.internal(f'{type(e).__name__} error. Aborting...')
                         return send_message(False, message='A server error occurred')
