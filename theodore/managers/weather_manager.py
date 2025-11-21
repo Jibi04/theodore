@@ -1,12 +1,8 @@
 import fake_user_agent
-import requests
-import httpx
-import time
-import os
+import httpx, time, os, asyncio
 
 from dotenv import load_dotenv
 from datetime import datetime
-from pathlib import Path
 from rich.table import Table
 from theodore.core.theme import console
 from theodore.core.logger_setup import base_logger
@@ -14,7 +10,7 @@ from theodore.core.utils import send_message, DATA_DIR, user_error
 from theodore.models.base import engine
 from theodore.managers.configs_manager import Configs_manager
 from theodore.managers.cache_manager import Cache_manager
-from requests.exceptions import ConnectionError, ConnectTimeout, ReadTimeout
+from httpx import ConnectionError, ConnectTimeout, ReadTimeout, ReadError, DecodingError
 
 
 load_dotenv()
@@ -88,19 +84,20 @@ class Weather_manager:
                         base_logger.debug('Client didn\'t raise any errors')
                         data = response.json()
                         base_logger.debug(f'weather data jsonified {data}')
-                except (ReadTimeout, ConnectionError, ConnectTimeout) as e:
+                except (ConnectionError, ConnectTimeout, ReadTimeout, ReadError,) as e:
                     if attempt == retries:
                         base_logger.internal(f'{type(e).__name__} error. Aborting...')
                         return send_message(False, message='A server error occurred')
                     time.sleep(1)
                 except httpx.HTTPError:
                     continue
-                except httpx.DecodingError:
+                except DecodingError:
                         base_logger.debug(f"Recieved non json-Response from Serve. {str(e)}")
                         return send_message(False, message=f"Recieved non json-Response from server {response.status_code}")
                 except Exception as e:
                     base_logger.internal(f'{type(e).__name__} error. Aborting...')
                     return send_message(False, message=f'A  error occurred')
+                
             if not data:
                 return send_message(False, message=f'Unable to get weather data for {location}')
             
@@ -119,7 +116,13 @@ class Weather_manager:
                 return send_message(False, message=f"[red bold][!] An API error occurred:[/red bold] {final_message}")
         
             base_logger.debug(f'creating new cache-object {cache_key} value {data}')
-            cache.set_cache(cache_key, data)
+
+            coroutines =[]
+            if 'current' in data: coroutines.append(cache.create_new_cache(self.to_dict(data, current=True), current=True))
+            if 'forecast' in data: coroutines.append(cache.create_new_cache(self.to_dict(data, forecast=True), forecasts=True))
+            if query == 'alerts': coroutines.append(cache.create_new_cache(self.to_dict(data, alerts=True), alerts=True))
+            
+            await asyncio.gather(*coroutines)
             return send_message(True, data=data)
         
 
@@ -235,4 +238,66 @@ class Weather_manager:
                 table.add_row(f"[bold white]Instructions[/]: {alert.get('instruction')}", style="magenta")
 
         return table
+    
+    def to_dict(self, data, alerts=False, current=False, forecast=False):
+        location = data.get('location', {})
+        if alerts:
+            alert = data.get('alerts').get('alert')
+            return {
+            "headline" : alert.get('headline'),
+            "event" : alert.get('event'),
+            "certainty" : alert.get('certainty'),
+            "urgency" : alert.get('urgency'),
+            "severity" : alert.get('severity'),
+            "note" : alert.get('note'),
+            "desc" : alert.get('desc'),
+            "instruction" : alert.get('instruction'),
+            "city": location.get('name'),
+            "country": location.get('country'),
+        }
+        
+        if forecast:
+            forecast = data.get('forecast', {}).get('forecastday', [])[0]
+            day = forecast.get('day', {})
+            astro = forecast.get('astro', {})
+            return {
+                    "sunrise": astro.get('sunrise'),
+                    "sunset": astro.get('sunset'),
+                    "moonrise": astro.get('moonrise'),
+                    "moonset": astro.get('moonset'),
+                    "min_temp_c": day.get('mintemp_c', {}),
+                    "max_temp_c": day.get('maxtemp_c', {}),
+                    "avg_temp_c": day.get('avgtemp_c', {}),
+                    "min_temp_f": day.get('mintemp_f', {}),
+                    "max_temp_f": day.get('maxtemp_f', {}),
+                    "avg_temp_f": day.get('avgtemp_f', {}),
+                    "maxwind_kph":day.get('maxwind_kph', {}),
+                    "avgvis_km": day.get('avgvis_km', {}),
+                    "maxwind_mph": day.get('maxwind_mph', {}),
+                    "avgvis_miles": day.get('avgvis_mph', {}),
+                    "daily_chance_of_rain": day.get('daily_chance_of_rain', {}),
+                    "daily_chance_of_snow": day.get('daily_chance_of_snow', {}),
+                    "daily_will_it_rain": day.get('daily_will_it_rain', {}),
+                    "daily_will_it_snow": day.get('daily_will_it_snow', {}),
+                    "city": location.get('name'),
+                    "country": location.get('country'),
+            }
+        
+        if current:
+            current = data.get("current", {})
+            return {
+                        "text": current.get('condition').get('text'),
+                        "temp_c": current.get('temp_c'),
+                        "feels_c": current.get('feels_c'),
+                        "temp_f": current.get('temp_f'),
+                        "feels_f": current.get('feels_f'),
+                        "humidity": current.get('humidity'),
+                        "wind_kph": current.get('wind_kph'),
+                        "wind_mph": current.get('wind_mph'),
+                        "wind_dir": current.get('wind_dir'),
+                        "city": location.get('name'),
+                        "country": location.get('country'),
+            }
+            
+
 
