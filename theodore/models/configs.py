@@ -10,7 +10,7 @@ Configs = Table(
     Column('category', String, primary_key=True, nullable=False),
     Column('default_path', String(100)),
     Column('default_location', String(100)),
-    Column('api_key', String(150)),
+    Column('api_key', String(150))
 )
 
 def create_table():
