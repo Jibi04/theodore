@@ -1,5 +1,12 @@
-import click, os, asyncio
-import rich_click as click
+import click, os, asyncio, tracemalloc
+import rich_click  as click
+
+# rich_click.rich_click.USE_RICH_MARKUP = True
+# rich_click.rich_click.STYLE_OPTION = "bold magenta"
+# rich_click.rich_click.STYLE_SWITCH = "reverse green"
+# rich_click.rich_click.STYLE_HELPTEXT = "bright_blue"
+# rich_click.rich_click.MAX_WIDTH = 100
+
 
 from theodore.core.theme import cli_defaults
 from theodore.core.logger_setup import base_logger
@@ -9,7 +16,7 @@ from theodore.cli.weather_cli import weather
 from theodore.cli.download_cli import downloads
 from theodore.cli.file_cli import file_manager
 from theodore.tests.tasks_test import tasks_test
-from theodore.core.worker_setup import start_workers
+from theodore.cli.controller import Controller
 from theodore.managers.file_manager import File_manager
 from theodore.managers.download_manager import Downloads_manager
 from theodore.managers.tasks_manager import Task_manager
@@ -17,6 +24,8 @@ from theodore.managers.configs_manager import Configs_manager
 from theodore.managers.weather_manager import Weather_manager
 
 
+
+from theodore.core.worker_setup import start_workers
 # ======= Theme Import instantiation ========
 cli_defaults()
 
@@ -28,8 +37,12 @@ cli_defaults()
 def theodore(ctx, verbose):
     """🤖 Theodore — your personal CLI Assistant"""
 
+    start_workers(20)
+
+
     ctx.ensure_object(dict)
     ctx.obj["verbose"] = verbose
+    ctx.obj['controller'] = ""
     ctx.obj['task_manager'] = Task_manager()
     ctx.obj['config_manager'] = Configs_manager()
     ctx.obj['weather_manager'] = Weather_manager()
@@ -43,18 +56,6 @@ def theodore(ctx, verbose):
 def tests(ctx):
     """Test out CLI commands"""
 
-def AsyncRunner():
-    try:
-        worker_task = asyncio.create_task(start_workers(10))
-
-        theodore.main(standalone_mode=False)
-    except Exception as e:
-        print(f'An Error occurred in the AsyncRunner {type(e).__name__}: {str(e)}')
-    finally:
-        worker_task.cancel()
-
-
-    
 
 tests.add_command(tasks_test, name="tasks")
 task_manager.add_command(file_manager, name='file-manager')
@@ -66,5 +67,9 @@ theodore.add_command(config, name="configs")
 theodore.add_command(downloads, name="download")
 theodore.add_command(file_manager, name="files")
 
+
+import tracemalloc
+
 if __name__ == "__main__":
-    asyncio.run(AsyncRunner())
+    # start_workers(10)
+    theodore()

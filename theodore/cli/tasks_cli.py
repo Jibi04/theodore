@@ -1,14 +1,16 @@
 import click
 import rich_click as click
-import asyncio
-
 from dateparser import parse
 from click_option_group import optgroup, RequiredMutuallyExclusiveOptionGroup, RequiredAllOptionGroup, RequiredAnyOptionGroup
 from sqlalchemy.exc import SQLAlchemyError
 from theodore.core.utils import user_error, user_success, user_warning, user_info, get_task_table, base_logger
+from theodore.managers.tasks_manager import Task_manager
+from theodore.cli.controller import add_to_Queue
 from theodore.core.theme import console
  
 
+import time
+TaskManager = Task_manager()
 
 @click.group()
 @click.pass_context             
@@ -27,6 +29,7 @@ def task_manager(ctx):
 def new(ctx, title, description, status, due, remind):
     """Create new task"""
     base_logger.internal('getting manager from task manager')
+    controller = ctx.obj['controller']
     manager = ctx.obj['task_manager']
     args_map = ctx.params
 
@@ -36,7 +39,7 @@ def new(ctx, title, description, status, due, remind):
             base_logger.internal(f'parsing due date {due}')
             due = parse(due)
             if due is None:
-                user_error("Invalid date format")
+                user_error("Cannot set reminder, Invalid date format")
                 return
         else:
             due = None
@@ -44,7 +47,19 @@ def new(ctx, title, description, status, due, remind):
         args_map['due'] = due
 
         base_logger.internal('creating new tasks ... waiting for response from manager')
-        response = asyncio.run(manager.new_task(**args_map))
+        # ----------------
+        # Runtime Tests
+        # ----------------
+        start_time = time.perf_counter()
+        response = add_to_Queue(TaskManager.new_task, True, args_map)
+        stop_time = time.perf_counter()
+        result_time = stop_time - start_time
+
+        print(f"""
+---------------- Runtime Analysis --------------------
+Controller directly no ctx took {result_time} to finish
+""")
+
 
         base_logger.internal('getting message from response')
         msg = response.get('message', "Couldn't create new task")
@@ -108,7 +123,7 @@ def update(ctx, **kwargs):
             ctx.abort()
         
         base_logger.internal('updating task ... waiting for response from manager')
-        response = asyncio.run(manager.update_task(**args_map))
+        response = manager.update_task(**args_map)
 
         base_logger.internal('getting message from response')
         msg = response.get('message', "No message was recieved from update manager")
@@ -149,7 +164,7 @@ def list(ctx, all, deleted, **kwargs):
 
     try:
         base_logger.internal('getting task ... waiting for response from manager')
-        response = asyncio.run(manager.get_tasks(**args_map))
+        response = manager.get_tasks(**args_map)
 
         if not response.get('ok'):
             user_error(response.get('message'))
@@ -176,8 +191,8 @@ def search(ctx, keyword):
     base_logger.internal('getting manager from ctx obj')
     manager = ctx.obj['task_manager']
     try:
-        base_logger.internal('getting results from keyword search {keyword} task ... waiting for response from manager')
-        response = asyncio.run(manager.search_tasks(keyword))
+        base_logger.internal(f'getting results from keyword search {keyword} task ... waiting for response from manager')
+        response = manager.search_tasks(keyword)
         base_logger.internal('getting message from response')
         msg = response.get('message')
         if not response.get('ok'):
@@ -221,21 +236,21 @@ def trash(ctx, **kwargs):
             ctx.abort()
 
         base_logger.internal(f'moving to trash {args_map} ... waiting for response from manager')
-        response = asyncio.run(manager.move_to_trash(**args_map))
+        response = manager.move_to_trash(**args_map)
 
         base_logger.internal('getting message from response')
         msg = response.get('message', 'An unknown error occurred')
+        if not response.get('ok'):
+            user_error(msg)
+            return
+        
+        user_success(msg)
+        return
     except Exception as e:
         base_logger.internal('An unknown error occurred Aborting ...')
-        user_error(f"{type(e).__name__}: {e}")
+        user_error(f"{type(e).__name__}: {str(e)}")
         return
     
-    if not response.get('ok'):
-        user_error(msg)
-        return
-    
-    user_success(msg)
-    return
 
 
 @task_manager.command()
@@ -245,7 +260,7 @@ def trash(ctx, **kwargs):
 @optgroup.option('--task_id', '-tid', type=int)
 @optgroup.option('-ids', type=str, help='comma separated ids')
 @click.pass_context
-def delete(ctx, **kwargs):
+async def delete(ctx, **kwargs):
     """Permanently delete task(s) from bin"""
     base_logger.internal('loading tasks manager from ctx obj')
     manager = ctx.obj['task_manager']
@@ -259,18 +274,17 @@ def delete(ctx, **kwargs):
             ctx.abort()
         
         base_logger.internal(f'deleting {args_map} ... waiting for response from manager')
-        response = asyncio.run(manager.delete_task(**args_map))
+        response = manager.delete_task(**args_map)
         msg = response.get('message', 'An unknown error occurred with delete manager')
+        if not response.get('ok'):
+            user_error(msg)
+            return
+        user_success(msg)
+        return
     except Exception as e:
         base_logger.internal('An unknown error occurred Aborting ...')
         user_error(f"{type(e).__name__}: {e}")
         return
-    if not response.get('ok'):
-        user_error(msg)
-        return
-    
-    user_success(msg)
-    return
 
 
 @task_manager.command()
@@ -287,19 +301,16 @@ def restore(ctx, ids, **kwargs):
     args_map = ctx.params
     try:
         base_logger.internal(f'restoring trash {args_map} ... waiting for response from manager')
-        response = asyncio.run(manager.restore_from_trash(**args_map))
+        response = manager.restore_from_trash(**args_map)
         base_logger.internal('getting task response')
         msg = response.get('message', 'An unknown error occurred. Unable to restore')
+        if not response.get('ok'):
+            user_error(msg)
+            return
+        user_success(msg)
+        return
     except Exception as e:
         base_logger.internal('An unknown error occurred Aborting ...')
         user_error(f"{type(e).__name__}: {e}")
         return
     
-    if not response.get('ok'):
-        user_error(msg)
-        return
-    user_success(msg)
-    return
-
-
-

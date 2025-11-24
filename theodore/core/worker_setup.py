@@ -1,44 +1,44 @@
-import asyncio
-from sqlalchemy import insert
-from asyncio import PriorityQueue as AsyncPriorityQueue
-from sqlalchemy.exc import SQLAlchemyError
-from datetime import datetime
+# In theodore.core.worker_setup (or similar file)
+import threading
+import queue
+import asyncio # Still needed to run async manager methods
+# ... (other imports) ...
 
-from theodore.models.base import engine
-from theodore.core.utils import user_error, local_tz
-from theodore.models.file import Queues
+# 1. Define the Synchronous Queue
+Queue = queue.Queue() 
+NUM_WORKERS = 4 
 
-Queue = AsyncPriorityQueue()
-
-async def worker():
+# 2. The Synchronous Worker Function (Target for the Thread)
+def worker():
     while True:
-        _, (func, args) = await Queue.get()
+        # Get item from the synchronous queue (This blocks until an item is available)
+        priority, (func, args) = Queue.get()
 
         try:
-            async with engine.begin() as conn:
+            # ⚠️ CRITICAL STEP: Run the ASYNC manager function in an event loop
+            asyncio.run(func(*args)) 
+            
+            # ... (Any synchronous logging/DB updates after task completion) ...
 
-                response = func(*args)
-                query = insert(Queues)
-                if response:
-                    message= response.get('message')
-                    data = response.get('data', {})
-                    date = response.get('date', datetime.now(local_tz))
-                    query = query.values(func_name=func.__name__, args=args, message=message, data=data, date=date)
-                else: query = query.values(func_name=func.__name__, args=args, date=datetime.now(local_tz))
-                
-                await conn.execute(query)
-        except SQLAlchemyError as exc:
-            user_error(str(exc))
         except Exception as e:
-            user_error(f"Worker Failed: {type(e).__name__}: {str(e)}")
+            # Handle logging/errors cleanly
+            print(f"Sync Worker Failed: {type(e).__name__}: {str(e)}") 
         finally:
+            # IMPORTANT: Mark the task as done
             Queue.task_done()
 
-async def start_workers(num_workers):
-    for _ in range(num_workers):
-        asyncio.create_task(worker())
+# 3. The Synchronous Starter Function
+def start_workers(num_workers=NUM_WORKERS):
+    """Starts workers as persistent threads."""
+    for i in range(num_workers): 
+        # Start a standard thread, targeting the synchronous worker function
+        threading.Thread(target=worker, daemon=True, name=f'SyncWorker-{i+1}').start()
     
-    await Queue.join()
+    # Wait a moment to ensure threads start
+    # threading._sleep(0.1) # Using internal sleep or simple time.sleep(0.1)
 
-async def put_new_task(priority, funcname, args):
-    await Queue.put((priority, (funcname, args)))
+# 4. The `put` Function (Synchronous)
+def put_new_task(priority, funcname, args):
+    """Puts a new item onto the synchronous queue."""
+    # Ensure funcname is the async manager function (coroutine)
+    Queue.put((priority, (funcname, args)))
