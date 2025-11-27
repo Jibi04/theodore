@@ -87,18 +87,12 @@ def multi_download(urls, dir_path = None):
 # ------------------------------------------
 
 @click.group()
+@click.option('--url', type=str, help='comma separated urls')
+@click.option('--resume', is_flag=True, help='Resume specific file download')
+@click.option('--dir_path', '-p', default="~/Downloads", type=str, help='directory to save file in')
 @click.pass_context
-def downloads(ctx):
-    """Manage and track File downloads"""
-
-@downloads.command()
-@optgroup.group(name='required options', cls=RequiredAnyOptionGroup)
-@optgroup.option('--url', type=str, help='comma separated urls')
-@optgroup.option('--resume', is_flag=True, help='Resume specific file download')
-@click.option('--dir_path', '-p', type=str, help='directory to save file in')
-@click.pass_context
-def movie(ctx, url, dir_path, resume):
-    """Download movies mkv, mp4, and zip"""
+def downloads(ctx: click.Context, url: str, resume: bool, dir_path: str) -> None:
+    """Download, Manage and track downloads"""
     base_logger.internal('preparing downloads manager')
 
     manager = ctx.obj['config_manager']
