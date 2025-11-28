@@ -80,22 +80,30 @@ def multi_download(urls, dir_path = None):
         movie_configs["downloads"]["movies"].setdefault(url_path_name, {"url": u, "is_downloaded": False})
 
     configs_manager.save_file(movie_configs, movie=True)
-    # executor.shutdown(wait=True)
+    executor.shutdown(wait=True)
     return
 # ------------------------------------------
 #             Main Downloads CLI 
 # ------------------------------------------
 
 @click.group()
-@click.option('--url', type=str, help='comma separated urls')
-@click.option('--resume', is_flag=True, help='Resume specific file download')
 @click.option('--dir_path', '-p', default="~/Downloads", type=str, help='directory to save file in')
 @click.pass_context
-def downloads(ctx: click.Context, url: str, resume: bool, dir_path: str) -> None:
+def downloads(ctx: click.Context, dir_path: str) -> None:
+    """Download, Manage and track downloads"""
+    # Group logic runs before subcommands.
+    ctx.obj['dir_path'] = dir_path
+
+@downloads.command() # <--- Use the group name to register the command
+@click.option('--url', '-u', type=str, help='comma separated urls')
+@click.option('--resume', is_flag=True, help='Resume specific file download')
+@click.pass_context
+def file(ctx: click.Context, url: str, resume: bool) -> None:
     """Download, Manage and track downloads"""
     base_logger.internal('preparing downloads manager')
 
     manager = ctx.obj['config_manager']
+    dir_path = ctx.obj.get('dir_path', None)
     configs = manager.load_file(config=True)
 
 

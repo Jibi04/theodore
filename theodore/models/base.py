@@ -1,11 +1,9 @@
 import asyncio
+from contextlib import asynccontextmanager
 from sqlalchemy import MetaData, inspect
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from pathlib import Path
 from theodore.core.utils import base_logger, DATA_DIR
-
-
-Tasks = ""
 
 DB_DIR = DATA_DIR
 DB_DIR.mkdir(parents=True, exist_ok=True)
@@ -16,8 +14,20 @@ DB = f"sqlite+aiosqlite:///{DB_PATH}"
 # engine = create_async_engine(DB, echo=True) 
 
 engine = create_async_engine(DB, echo=False)
+LOCAL_SESSION = async_sessionmaker(bind=engine)
 meta = MetaData()
 
+@asynccontextmanager
+async def get_async_session():
+    session: AsyncSession = LOCAL_SESSION()
+    try:
+        async with session.begin() as session:
+            yield session
+
+    except Exception:
+        raise
+    finally:
+        await session.close()
 
 async def create_tables():
     base_logger.internal('Connecting to the database engine')

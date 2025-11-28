@@ -1,7 +1,5 @@
-import  rich_click  as cl
 from theodore.core.utils import send_message, parse_date, base_logger, user_error, normalize_ids
 from theodore.core.theme import cli_defaults, console
-import asyncio
 from sqlalchemy import insert, update, delete, select
 from sqlalchemy.exc import SQLAlchemyError
 from theodore.models.base import engine
@@ -277,7 +275,7 @@ class Task_manager():
                 if not rows:
                     base_logger.internal('Db returned a zero row count no matching record found')
                     return send_message(False, "No matching record found.")
-                data = [dict(row) for row in rows]
+                data = rows
                 base_logger.debug(f'Converted db response to dict objects: {data}')
                 return send_message(True, data=data)
         except SQLAlchemyError as e:
