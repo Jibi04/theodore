@@ -22,6 +22,9 @@ FILE_PATH = CACHE_DIR / 'weather.cache'
 
 class Cache_manager:
     """Loads weather and File cache"""
+    def __init__(self, ttl):
+        self.ttl = ttl
+        self.cache = self._load_cache()
 
     async def load_cache(self, current=False, alerts=False, forecasts=False, file_logs=False) -> Dict:
         try:

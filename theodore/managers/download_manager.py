@@ -26,6 +26,12 @@ def pause_marker_path(filename) -> Path:
 def cancel_marker_path(filename) -> Path:
     return TEMP_DIR / f"cancel_{clean_file(filename)}.lock"
 
+def downloading_marker_path(filename) -> Path:
+    return TEMP_DIR / f"downloading_{clean_file(filename)}.lock"
+
+def get_marker(filename: str):
+    return TEMP_DIR / f"downloading_{clean_file(filename)}.lock"
+
 
 class Downloads_manager:
 
@@ -40,7 +46,6 @@ class Downloads_manager:
         cancel_marker_path(filename).write_text("cancelled")
         return send_message(True, message="marker created")
         
-
     @classmethod
     def resume_download(cls, filename):
         file = pause_marker_path(filename)
@@ -48,6 +53,16 @@ class Downloads_manager:
             file.unlink(missing_ok=True)
             return send_message(True, message="marker removed")
         
+    @classmethod
+    def start_download(cls, filename):
+        downloading_marker_path(filename).write_text(f"{filename} downloading")
+
+    @classmethod
+    def stop_download(cls, filename):
+        file = downloading_marker_path(filename)
+        if file.exists():
+            file.unlink
+
     async def update_client(self, filename, filepath):
         stmt = (update(file_downloader)
                 .where(file_downloader.c.filename==filename)
@@ -133,9 +148,7 @@ class Downloads_manager:
                         if downloaded_bytes < expected_total and expected_total > 0:
                             total_size = expected_total
                             
-                            # 2. Open the file ONCE with aiofiles BEFORE the chunk loop
                             async with aiofiles.open(filepath, mode=mode) as f:
-                                # 3. Initialize tqdm bar
                                 with tqdm(
                                     initial=downloaded_bytes, # Start from the previously downloaded bytes
                                     total=total_size,        # The total expected size
@@ -144,7 +157,9 @@ class Downloads_manager:
                                     unit_scale=True,
                                     disable=(total_size == 0)
                                 ) as t:
-                                    
+                                    # set download marker
+                                    cls().start_download(filename)
+
                                     # Use aiter_bytes() with chunksize from the function argument
                                     async for chunk in response.aiter_bytes(chunk_size=chunksize):
                                         
@@ -154,14 +169,15 @@ class Downloads_manager:
                                         # ------- pause / resume feature -------
                                         while pause_marker.exists():
                                             user_info(f"Download paused for {filename}")
-                                            # Use asyncio.sleep to avoid blocking the loop while waiting
                                             await asyncio.sleep(1.0) 
 
                                         # ---------- Cancel feature ----------
                                         if cancel_marker.exists():
                                             user_error(f'Download cancelled for {filename}')
                                             await aiofiles.os.remove(filepath)
-                                            return send_message(False, message=f'Download cancelled for {filename}')
+                                            cls().stop_download()
+                                            user_info(f'Download cancelled for {filename}')
+                                            return
                                         
                                         # FIX 4: Await the file write, using the file handle opened above
                                         if chunk:
@@ -183,8 +199,10 @@ class Downloads_manager:
                             else:
                                 user_success(f"Download complete for {filename}.")
                                 await cls().update_client(filename=filename) 
+                                
+                                # remove marker for download
+                                cls().stop_download(filename)
                                 return
-
                 except httpx.ConnectTimeout:
                     user_error(f"Connection timeout during download of {filename}. Attempting retry {attempt + 1}/{retries}...")
                     base_logger.internal("HTTPX timeout occurred.")
@@ -195,13 +213,23 @@ class Downloads_manager:
                     base_logger.internal(f"HTTPX Status Error: {e.response.status_code}")
                     await asyncio.sleep(2 ** attempt)
                     continue
+                except KeyboardInterrupt:
+                    user_info('Keyboard Interupt Aborting...')
+                    await asyncio.sleep(0.7)
+                    cls().cancel_download()
+                    return
                 except Exception as e:
-                    user_error(f"An unexpected error occurred during download of {filename}: {e}. Stopping.")
+                    user_error(f"An unexpected error occurred during download of {filename}: {e}. Stopping...")
+                    await asyncio.sleep(1)
+                    cls().cancel_download()
                     raise
-            
+                finally:
+                    cls().cancel_download()
+
         # If the loop finishes without success
         user_error(f"Failed to download {filename} after {retries} attempts.")
-        return send_message(False, message=f'Failed to download {filename} after {retries} attempts.')
+        cls().cancel_download()
+        return
             
 
 

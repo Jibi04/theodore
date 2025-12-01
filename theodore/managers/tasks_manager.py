@@ -11,7 +11,7 @@ cli_defaults()
 
 class Task_manager():
 
-    async def new_task(self, title: str = None, description: str = None, status: str = None, remind: str = None, due: datetime = None):
+    async def new_task(self, title: str = None, description: str = None, status: str = None, remind: str = None, due: datetime = None) -> dict:
         try:
             async with get_async_session() as conn:
                 if not title.strip():
@@ -215,7 +215,7 @@ class Task_manager():
                     return send_message(False, message="No matching record found.")
                 
                 base_logger.internal('Converting db response objects into dictionary objects')
-                rows_dict = [dict(row) for row in rows]
+                rows_dict = rows.mappings().all()
                 base_logger.debug(f'Converted db response to dict objects {rows_dict}')
 
                 return send_message(True, data=rows_dict)

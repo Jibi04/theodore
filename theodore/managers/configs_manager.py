@@ -11,9 +11,7 @@ import json
 CONFIG_FILE = JSON_DIR / "configs.json"
 MOVIE_FILE = JSON_DIR / "movies.json"
 
-
 class Configs_manager:
-
     def load_file(self, movie=False, config=False):
         if movie: file = MOVIE_FILE
         if config: file = CONFIG_FILE
@@ -29,15 +27,12 @@ class Configs_manager:
             except json.JSONDecodeError:
                 return {}
         return {}
-
     
     def save_file(self, data: dict, config=False, movie=False):
         if config: file = CONFIG_FILE
         if movie: file = MOVIE_FILE
-
         if not movie and not config:
             raise NotImplementedError('File not saved no path set.')
-
         try:
             file.write_text(json.dumps(data, indent=4))
             base_logger.internal('Successfully saved config file')

@@ -32,7 +32,7 @@ def current(ctx, temp, location, clear_cache, speed):
     if clear_cache:
         ttl = 0
 
-    response = asyncio.run(weather_manager.make_request(query='forecast', location=location, retries=4, ttl=ttl))
+    response = asyncio.run(weather_manager.make_request(query='forecast', location=location, retries=4))
     message = response.get('message')
     
 
