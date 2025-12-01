@@ -36,7 +36,7 @@ EXTENSION_MAP = {
     '.xlsx': HOME / Documents / 'Excel Files'
 }
 
-pattern = ['*.mkv', '*.mp4', '*.deb', '*.sh', '*.pdf', '*.docx', '*.tar', '*.zip', '*.csv', '*.xlsx'] 
+pattern = ['*.mkv', '*.mp4', '*.deb', '*.sh', '*.pdf', '*.docx', '*.tar', '*.zip', '*.csv', '*.xlsx', '*.srt', '*.html'] 
 
 class File_manager:
     def log_move(self, src: Path, dst: Path):
@@ -103,7 +103,7 @@ class File_manager:
         try:
             results = self.search_files(src, base_path, recursive)
             if not results:
-                user_error(f'File matching \'{pattern}\' Not Found.')
+                user_error(f'File Not Found in {str(base_path.absolute())}. Check file present destination or set absolute file path or None')
                 return
             
             file_dict = {}
@@ -206,7 +206,7 @@ class File_manager:
                 print('Cannot undo move. file not found!')
                 return
             
-            dst.mkdir(parents=True, exist_ok=True)
+            dst.parents.mkdir(parents=True, exist_ok=True)
             destination = dst / src.name
 
             shutil.move(src, destination)
@@ -273,7 +273,7 @@ class File_manager:
         return result_ids
 
     def search_files(self, pattern, base_path, recursive):
-        compiled_pattern = re.compile(pattern, re.I)
+        compiled_pattern = re.compile(pattern + ".*", re.I)
         results = []
         if recursive:
             results = [f for f in base_path.rglob('*') if compiled_pattern.search(f.name)]

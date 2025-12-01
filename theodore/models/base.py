@@ -1,23 +1,41 @@
 import asyncio
+from contextlib import asynccontextmanager
 from sqlalchemy import MetaData, inspect
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from pathlib import Path
-from theodore.core.utils import base_logger, DATA_DIR
+from theodore.core.utils import base_logger
 
 
-Tasks = ""
+def create_engine():
+    from theodore.core.utils import DATA_DIR
 
-DB_DIR = DATA_DIR
-DB_DIR.mkdir(parents=True, exist_ok=True)
-DB_PATH = DB_DIR / "theodore.sqlite"
+    DB_DIR = DATA_DIR
+    DB_DIR.mkdir(parents=True, exist_ok=True)
+    DB_PATH = DB_DIR / "theodore.sqlite"
 
 
-DB = f"sqlite+aiosqlite:///{DB_PATH}"
-# engine = create_async_engine(DB, echo=True) 
+    DB = f"sqlite+aiosqlite:///{DB_PATH}"
+    # engine = create_async_engine(DB, echo=True) 
 
-engine = create_async_engine(DB, echo=False)
+    engine = create_async_engine(DB, echo=False)
+    return engine
+
+engine = create_engine()
+LOCAL_SESSION = async_sessionmaker(bind=engine)
 meta = MetaData()
 
+@asynccontextmanager
+async def get_async_session():
+    session: AsyncSession = LOCAL_SESSION()
+    try:
+        yield session
+        await session.commit()
+
+    except Exception:
+        raise
+    finally:
+        await session.close()
+        pass
 
 async def create_tables():
     base_logger.internal('Connecting to the database engine')

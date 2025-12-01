@@ -1,28 +1,21 @@
+import asyncio, aiofiles, httpx, tempfile, re
+from sqlalchemy import update
 from theodore.core.logger_setup import base_logger
 from theodore.managers.configs_manager import Configs_manager
-import requests
-from pathlib import Path
-from http.client import IncompleteRead
-from requests.exceptions import HTTPError, ConnectionError, ChunkedEncodingError, ConnectTimeout, ReadTimeout
-import time, sys, json
-from datetime import datetime, timezone
+from theodore.core.utils import send_message, user_success, user_error, user_info, local_tz
+from theodore.models.downloads import file_downloader
+from theodore.models.base import get_async_session
+from datetime import datetime
 from fake_user_agent import user_agent
-from theodore.core.utils import send_message, user_success, user_error
-import tempfile
-import re
-# Import tqdm for progress bar management
-from tqdm.auto import tqdm
+from pathlib import Path
+from tqdm.asyncio import tqdm
 
 ua = user_agent()
 manager = Configs_manager()
 
-
 # set existence of file as markers for pause, resume or download
 TEMP_DIR = Path(tempfile.gettempdir()) / "theodore_downloads"
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
-
-# TEMP_DIR = Path(__file__).parent.parent / "theodore_temp"
-# TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
 def clean_file(filename) -> str:
     return re.sub(r'[^a-zA-Z0-9.-]', '_', filename)
@@ -32,6 +25,12 @@ def pause_marker_path(filename) -> Path:
 
 def cancel_marker_path(filename) -> Path:
     return TEMP_DIR / f"cancel_{clean_file(filename)}.lock"
+
+def downloading_marker_path(filename) -> Path:
+    return TEMP_DIR / f"downloading_{clean_file(filename)}.lock"
+
+def get_marker(filename: str):
+    return TEMP_DIR / f"downloading_{clean_file(filename)}.lock"
 
 
 class Downloads_manager:
@@ -47,7 +46,6 @@ class Downloads_manager:
         cancel_marker_path(filename).write_text("cancelled")
         return send_message(True, message="marker created")
         
-
     @classmethod
     def resume_download(cls, filename):
         file = pause_marker_path(filename)
@@ -55,176 +53,183 @@ class Downloads_manager:
             file.unlink(missing_ok=True)
             return send_message(True, message="marker removed")
         
-    def update_client(self, filename, movies:dict, filepath):
-        movies.setdefault('downloads', {})
-        movies['downloads'].setdefault('movies', {})
-        movies['downloads']['movies'].setdefault(filename, {})
-
-        movies['downloads']['movies'][filename].update(
-            {
-                "is_downloaded": True,
-                "date_downloaded": datetime.now(timezone.utc).isoformat(),
-                "filepath": str(filepath)
-                })
-        
-        user_success(f'{filename} download complete!')
-        manager.save_file(movies, movie=True)
+    @classmethod
+    def start_download(cls, filename):
+        downloading_marker_path(filename).write_text(f"{filename} downloading")
 
     @classmethod
-    def download_movie(cls, url, filepath, filename=None, chunksize=8192, retries=10):
+    def stop_download(cls, filename):
+        file = downloading_marker_path(filename)
+        if file.exists():
+            file.unlink
 
-        filepath = Path(filepath).expanduser()
+    async def update_client(self, filename, filepath):
+        stmt = (update(file_downloader)
+                .where(file_downloader.c.filename==filename)
+                .values(
+                is_downloaded=True,
+                date_downloaded=datetime.now(local_tz)
+                ))
         
-        base_logger.internal('Preparing file directory for download')
-        filepath.parent.mkdir(parents=True, exist_ok=True)
+        async with get_async_session() as session:
+            await session.execute(stmt)
+        user_success(f'{filename} download complete!')
 
+    @classmethod
+    async def download_movie(cls, url: str, filepath: Path|str, filename: str=None, chunksize: int=8192, retries: int=10) -> dict:
+        
+        filepath = Path(filepath).expanduser()
+        base_logger.internal('Preparing file directory for download')
+        
+        # FIX 1: Pathlib's synchronous mkdir is fine here, as it's not I/O intensive.
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+        
         if not filename:
             filename = filepath.name
 
         # ----------- Remove stale markers before starting or resuming download --------------
+        try:
+            base_logger.internal(f"Cleaning markers for: {filename}")
+            pause_marker_path(filename).unlink(missing_ok=True)
+            cancel_marker_path(filename).unlink(missing_ok=True)
+        except Exception as e:
+            user_error(f"MARKER CLEAN ERROR: {e}")
+            raise
 
         for attempt in range(1, retries + 1):
-
-            # pause_marker_path(filename).unlink(missing_ok=True)
-            # cancel_marker_path(filename).unlink(missing_ok=True)
-
-            # movies = manager.load_file(movie=True)
-
-            for attempt in range(1, retries + 1):
-
-                try:
-                    base_logger.internal(f"Cleaning markers for: {filename}")
-                    pause_marker_path(filename).unlink(missing_ok=True)
-                    cancel_marker_path(filename).unlink(missing_ok=True)
-                except Exception as e:
-                    user_error(f"MARKER CLEAN ERROR: {e}")
-                    raise
-
-                try:
-                    movies = manager.load_file(movie=True)
-                except Exception as e:
-                    print("LOAD FILE ERROR:", e)
-                    raise
-
             downloaded_bytes = 0
-
-            # -------- Resume feature ---------
+            
+            # -------- Resume feature: Check size before request ---------
             if filepath.exists():
                 try:
+                    # Pathlib stat is synchronous
                     downloaded_bytes = filepath.stat().st_size
                 except OSError:
                     downloaded_bytes = 0
 
             headers = {"Range": f"bytes={downloaded_bytes}-"} if downloaded_bytes > 0 else None
+            # Mode determines if we are appending ('ab') or starting fresh ('wb')
             mode = 'ab' if downloaded_bytes > 0 else 'wb'
-
-            with requests.Session() as session:
-                session.headers.update({"User-Agent": ua})
+            async with httpx.AsyncClient(timeout=30) as client:
                 try:
-                    user_success(f'Attempt {attempt}/{retries}: starting request')
-                    with session.get(url, stream=True, headers=headers, timeout=30) as r:
-                        r.raise_for_status()
-                        code = r.status_code
-
+                    # FIX 3: Use client.stream() method
+                    async with client.stream('GET', url=url, headers=headers) as response:
+                        user_success(f'Downloading {filename} Attempt {attempt}/{retries}: starting request')
+                        
+                        response.raise_for_status()
+                        code = response.status_code
+                        
                         # if browser doesn't support resume start over
                         if code == 200 and downloaded_bytes > 0:
-                            filepath.unlink(missing_ok=True)
-                        
-                        
+                            user_info("Starting over: Server doesn't support resume or returned full content.")
+                            try:
+                                await aiofiles.os.remove(filepath)
+                            except FileNotFoundError:
+                                pass # Already gone
+                            downloaded_bytes = 0 # Reset downloaded bytes for the new start
+                            continue # Restart the retry loop
+
                         # --- TQDM SETUP START ---
                         # 1. Determine total size from headers
-                        content_range = r.headers.get('content-range')
-                        if content_range:
-                            expected_total = int(content_range.split('/')[-1])
-                        else:
-                            expected_total = int(r.headers.get('content-length', 0))
+                        content_range = response.headers.get('Content-Range')
+                        content_length = response.headers.get('Content-Length', '0')
                         
-                        # 2. Check if the file is incomplete
+                        if code == 206 and content_range:
+                            expected_total = int(content_range.split('/')[-1])
+                            current_segment_start = downloaded_bytes
+                        elif code == 200:
+                            expected_total = int(content_length)
+                            current_segment_start = 0 # Starting from scratch
+                        else:
+                            # Fallback if range/length are missing
+                            expected_total = downloaded_bytes + int(content_length) 
+                            current_segment_start = downloaded_bytes
+
                         if downloaded_bytes < expected_total and expected_total > 0:
-                            total_size = expected_total  # This is the total file size
+                            total_size = expected_total
+                            
+                            async with aiofiles.open(filepath, mode=mode) as f:
+                                with tqdm(
+                                    initial=downloaded_bytes, # Start from the previously downloaded bytes
+                                    total=total_size,        # The total expected size
+                                    desc=f"Downloading {filename}",
+                                    unit='B',
+                                    unit_scale=True,
+                                    disable=(total_size == 0)
+                                ) as t:
+                                    # set download marker
+                                    cls().start_download(filename)
 
-                            # 3. Initialize tqdm bar
-                            # initial: start from the previously downloaded bytes (for resume)
-                            # total: the total expected size
-                            # desc: label for the bar (using filename)
-                            # unit: bytes
-                            # unit_scale: True for B, KB, MB, etc.
-                            # disable: only disable if total_size is 0 (optional)
-                            with tqdm(
-                                initial=downloaded_bytes,
-                                total=total_size,
-                                desc=f"Downloading {filepath.name}",
-                                unit='B',
-                                unit_scale=True,
-                                disable=(total_size == 0)
-                            ) as t:
-                                
-                                with open(filepath, mode) as f:
-                                    for chunk in r.iter_content(chunk_size=chunksize):
+                                    # Use aiter_bytes() with chunksize from the function argument
+                                    async for chunk in response.aiter_bytes(chunk_size=chunksize):
+                                        
+                                        pause_marker = pause_marker_path(filename)
+                                        cancel_marker = cancel_marker_path(filename)
+
+                                        # ------- pause / resume feature -------
+                                        while pause_marker.exists():
+                                            user_info(f"Download paused for {filename}")
+                                            await asyncio.sleep(1.0) 
+
+                                        # ---------- Cancel feature ----------
+                                        if cancel_marker.exists():
+                                            user_error(f'Download cancelled for {filename}')
+                                            await aiofiles.os.remove(filepath)
+                                            cls().stop_download()
+                                            user_info(f'Download cancelled for {filename}')
+                                            return
+                                        
+                                        # FIX 4: Await the file write, using the file handle opened above
                                         if chunk:
-                                            pause_marker = pause_marker_path(filename)
-                                            cancel_marker = cancel_marker_path(filename)
-
-                                            # ------- pause / resume feature -------
-                                            while pause_marker.exists():
-                                                time.sleep(0.5)
-
-                                            # ---------- Cancel feature ----------
-                                            if cancel_marker.exists():
-                                                user_error(f'Download cancelled for {filename}')
-                                                return send_message(False, message=f'Download cancelled for {filename}')
-                                            
-                                            f.write(chunk)
+                                            await f.write(chunk)
                                             # 4. Use t.update() to advance the progress bar
                                             t.update(len(chunk))
-        
-                            # --- TQDM SETUP END ---
-                        
-                            # After the inner 'with tqdm(..)' block, we check the final size
+                                            
+                            # After the file is closed (out of the aiofiles.open context)
                             final_size = filepath.stat().st_size
-
                             if final_size != total_size:
                                 # Invalid file integrity Re-starting download
-                                filepath.unlink(missing_ok=True)
-                                user_error(f"Download finished but file size mismatch: {final_size} != {total_size}")
+                                try:
+                                    await aiofiles.os.remove(filepath)
+                                except FileNotFoundError:
+                                    pass
+                                user_error(f"Download finished but file size mismatch: {final_size} != {total_size}, Restarting ...")
                                 base_logger.internal("Corrupted file data restarting download")
+                                continue # Go to the next retry attempt
                             else:
-                                cls().update_client(filename=filename, movies=movies, filepath=filepath)
+                                user_success(f"Download complete for {filename}.")
+                                await cls().update_client(filename=filename) 
+                                
+                                # remove marker for download
+                                cls().stop_download(filename)
                                 return
-                    
-                except HTTPError as e:
-                    err_msg = str(e)
-
-                    if e.response.status_code == 416:
-                        cls().update_client(filename=filename, movies=movies, filepath=filepath)
-                        return
-                    user_error(f"HTTP ERROR: ", err_msg)
-                    time.sleep(30)
-                    if attempt == retries:
-                        user_error("Max retries reached. Aborting...")
-                        return send_message(False, message=f"Http Error: {err_msg}")
+                except httpx.ConnectTimeout:
+                    user_error(f"Connection timeout during download of {filename}. Attempting retry {attempt + 1}/{retries}...")
+                    base_logger.internal("HTTPX timeout occurred.")
+                    await asyncio.sleep(2 ** attempt) # Exponential backoff
                     continue
-                except (IncompleteRead, ConnectionError, ReadTimeout, ChunkedEncodingError, ConnectTimeout) as e:
-                    print()
-                    user_error(f"{type(e).__name__}: {str(e)}")
-                    print()
-                    if attempt == retries:
-                        user_error("Max retries reached, Aborting...")
-                        return send_message(False, message=f'"error": {str(e)}')
-                    for sec in range(5, 0, -1):
-                        sys.stdout.write(f"\rRetrying in {sec} seconds...")
-                        sys.stdout.flush()
-                        time.sleep(1)
-                    print()
-
+                except httpx.HTTPStatusError as e:
+                    user_error(f"HTTP error {e.response.status_code} for {filename}. Attempting retry {attempt + 1}/{retries}...")
+                    base_logger.internal(f"HTTPX Status Error: {e.response.status_code}")
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                except KeyboardInterrupt:
+                    user_info('Keyboard Interupt Aborting...')
+                    await asyncio.sleep(0.7)
+                    cls().cancel_download()
+                    return
                 except Exception as e:
-                    user_error(f"Unexpected error: {e}")
-                    return send_message(False, message=f'"error": {str(e)}')
+                    user_error(f"An unexpected error occurred during download of {filename}: {e}. Stopping...")
+                    await asyncio.sleep(1)
+                    cls().cancel_download()
+                    raise
+                finally:
+                    cls().cancel_download()
 
-            return send_message(False, message="Download failed unexpectedly")
-
-
-        
-
+        # If the loop finishes without success
+        user_error(f"Failed to download {filename} after {retries} attempts.")
+        cls().cancel_download()
+        return
+            
 
 

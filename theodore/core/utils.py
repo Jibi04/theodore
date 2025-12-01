@@ -1,12 +1,13 @@
 import dateparser 
-import json, re
-from datetime import datetime
+import re
 from rich.table import Table
 from pathlib import Path
-from theodore.core.theme import console
 from theodore.core.logger_setup import base_logger, error_logger
 import tempfile
 from zoneinfo import ZoneInfo
+from urllib.parse import unquote, urlparse
+from sqlalchemy import select, insert
+from sqlalchemy.exc import SQLAlchemyError
 
 
 # -------------------------
@@ -99,3 +100,52 @@ def get_current_weather_table(**kwargs):
 
 def get_current_weather_table(**kwargs):
     pass
+
+from theodore.models.base import get_async_session
+
+class Downloads:
+
+    def __init__(self, downloader_class):
+        self.file_downloader = downloader_class
+
+    def parse_url(self, url: str) -> str:
+        """
+        Parses urls using unqote and urlparse
+        return url filename
+        """
+        return Path(unquote(urlparse(url).path)).name
+
+    async def get_undownloaded_urls(self) -> list[str] | list:
+        """
+        Queries db for undownloded files
+        returns list
+        """
+        async with get_async_session() as session:
+            stmt = select(self.file_downloader.c.url).where(self.file_downloader.c.is_downloaded.is_(False))
+            result = await session.execute(stmt)
+            return result.scalars().all()
+        return []
+
+    async def bulk_insert(self, table: Table, values: list[dict]) -> None:
+        """
+        Insert values into table
+        Args:
+            table: DB table variable
+            values: key value dict objects of table column and entries
+        returns None
+        """
+        try:
+            async with get_async_session() as session:
+                stmt = insert(table).values(values)
+                await session.execute(stmt)
+                await session.commit()
+            return
+        except SQLAlchemyError:
+            raise
+        
+    async def get_full_name(self, filename):
+        async with get_async_session() as session:
+            stmt = select(self.file_downloader.c.filename.ilike(f'{filename}%')).where(self.file_downloader.c.is_downloaded.is_(False))
+            results = await session.execute(stmt)
+        filenames = results.scalars().all()
+        return filenames

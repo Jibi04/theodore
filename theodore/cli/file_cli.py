@@ -1,4 +1,5 @@
 import click
+import time
 import rich_click as click
 from click_option_group import optgroup, RequiredAllOptionGroup
 from theodore.core.utils import base_logger
@@ -12,16 +13,25 @@ def file_manager(ctx):
 
 @file_manager.command()
 @optgroup.group(name='default args', cls=RequiredAllOptionGroup)
-@optgroup.option('--source', '-f')
-@optgroup.option('--destination', '-d')
+@optgroup.option('--source', '-f', help="Name of File to move")
+@optgroup.option('--destination', '-d', help="Desired Location of file")
 @click.option('--all', '-a', is_flag=True, help='Copy all files')
-@click.option('--base_path', '-p', default="~/")
-@click.option('--recursive', '-r', is_flag=True)
+@click.option('--base_path', '-p', default="~/", help="Present Location of file, for easy access")
+@click.option('--recursive', '-r', is_flag=True, help="Recursively search for file")
 @click.pass_context
 def move(ctx, source, destination, base_path, recursive, all):
     """Move files and folder(s) to destinations of your choice"""
     manager = ctx.obj['file_manager']
     name, (dst, base) = manager.parse_user_regex_search(source, destination, base_path)
+    if recursive:
+        # start_time = time.perf_counter()
+        # message = "Parsing through all the files in your PC this is gonna take a while"
+        # stop_time = time.perf_counter()
+
+        # if start_time - stop_time > 4:
+        #     message = "You really have alot of files..."
+        # console.status(status="")
+        pass
     manager.move(src=name, dst=dst, recursive=recursive, base_path=base, all=all)
     return
 

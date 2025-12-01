@@ -1,27 +1,29 @@
 import asyncio
+from datetime import datetime
+from sqlalchemy import Table, Column, String, Float , ForeignKey, DateTime
+from theodore.models.base import meta, create_tables
+from theodore.core.utils import base_logger, error_logger, local_tz
 
-from sqlalchemy import Table, Column, String, Float , ForeignKey 
-from theodore.models.base import meta , engine, create_tables
-from theodore.core.utils import base_logger, error_logger
 
-
-Weather = Table(
-    'Weather',
+Current = Table(
+    'current',
     meta,
+    Column('city', String, primary_key=True),
     Column('country', String),
-    Column('city', String),
-    Column('condition', String),
-    Column('temp_C', Float),
-    Column('temp_F', Float),
-    Column('humidiy', String),
-    Column('wind_Speed', Float),
-    Column('wind_direction', String),
-    
+    Column("text", String),
+    Column("temp_c", Float),
+    Column("feels_c", Float),
+    Column("temp_f", Float),
+    Column("feels_f", Float),
+    Column("humidity", String),
+    Column("wind_kph", Float),
+    Column("wind_mph", Float),
+    Column("wind_dir", Float),
+    Column('time_requested', DateTime(timezone=local_tz), default=datetime.now(local_tz)),
 )
 
-
 Alerts = Table(
-    'Alerts',
+    'alerts',
     meta,
     Column('headline', String),
     Column('event', String),
@@ -32,26 +34,35 @@ Alerts = Table(
     Column('effective', String),
     Column('description', String),
     Column('instructions', String),
-    Column('city', ForeignKey('Weather.city'))
+    Column("country", String),
+    Column('city', ForeignKey('Current.city')),
+    Column('time_requested', DateTime(timezone=local_tz), default=datetime.now(local_tz)),
 )
 
 Forecasts = Table(
-    'Forecasts',
-    meta,
-    Column('sunrise_at', String),
-    Column('sunset_at', String),
-    Column('moonrise_at', String),
-    Column('moonset_at', String),
-    Column('avg_temp_f', String),
-    Column('avg_temp_c', String),
-    Column('max_temp_f', String),
-    Column('max_temp_c', String),
-    Column('min_temp_f', String),
-    Column('min_temp_c', String),
-    Column('chance_of_rain', String),
-    Column('chance_of_snow', String),
-    Column('will_it_rain', String),
-    Column('city', ForeignKey('Weather.city'))
+    'forecasts',
+        meta,
+    Column("sunrise", DateTime(local_tz)),
+    Column("sunset", DateTime(local_tz)),
+    Column("moonrise", DateTime(local_tz)),
+    Column("moonset", DateTime(local_tz)),
+    Column("min_temp_c", Float),
+    Column("max_temp_c", Float),
+    Column("avg_temp_c", Float),
+    Column("min_temp_f", Float),
+    Column("max_temp_f", Float),
+    Column("avg_temp_f", Float),
+    Column("maxwind_kph", Float),
+    Column("avgvis_km", Float),
+    Column("maxwind_mph", Float),
+    Column("avgvis_miles", Float),
+    Column("daily_chance_of_rain", String),
+    Column("daily_chance_of_snow", String),
+    Column("daily_will_it_rain", String),
+    Column("daily_will_it_snow", String),
+    Column("country", String),
+    Column('city', ForeignKey('Current.city')),
+    Column('time_requested', DateTime(timezone=local_tz), default=datetime.now(local_tz)),
 )
 
 # ctrl + shift + u + 00b0 + ENTER
@@ -67,4 +78,4 @@ def create_table():
     except Exception as e:
         error_logger.exception(e)
 
-# create_table()
+create_table()
