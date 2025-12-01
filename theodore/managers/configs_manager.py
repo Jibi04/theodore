@@ -1,7 +1,7 @@
 from sqlalchemy import select, update, insert
 from sqlalchemy.exc import SQLAlchemyError
 from theodore.models.configs import Configs
-from theodore.models.base import engine
+from theodore.models.base import get_async_session
 from theodore.core.utils import user_error, base_logger, error_logger, send_message, JSON_DIR, user_success
 from pathlib import Path
 import json
@@ -57,7 +57,7 @@ class Configs_manager:
         if default_path: data_map['default_path'] = default_path
 
         try:
-            async with engine.begin() as conn:
+            async with get_async_session() as conn:
                 base_logger.internal('Preparing configs statement')
                 stmt = insert(Configs).values(**data_map)
 
@@ -77,7 +77,7 @@ class Configs_manager:
     async def show_configs(self, weather: bool = False, downloads: bool = False, todos: bool = False):
         try:
             base_logger.internal('Starting connection with Database')
-            async with engine.begin() as conn:
+            async with get_async_session() as conn:
                 base_logger.internal('Preparing select statement')
                 stmt = select(Configs)
 
@@ -103,7 +103,7 @@ class Configs_manager:
 
     async def load_db_configs(self, category: str = None):
         try:
-            async with engine.begin() as conn:
+            async with get_async_session() as conn:
                 base_logger.internal('preparing config load statement')
                 stmt = select(Configs)
                 if category:
@@ -138,7 +138,7 @@ class Configs_manager:
             if api_key: data_map['api_key'] = api_key
             if default_path: data_map['default_path'] = default_path
 
-            async with engine.begin() as conn:
+            async with get_async_session() as conn:
                 base_logger.internal('preparing save config statement')
                 stmt = update(Configs).where(Configs.c.category == category)
                 stmt = stmt.values(**data_map)

@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from sqlalchemy import select, update, insert
 from sqlalchemy.exc import SQLAlchemyError
-from theodore.models.base import engine
+from theodore.models.base import get_async_session
 from theodore.models.other_models import File_logs
 from theodore.models.weather import Current, Alerts, Forecasts
 from theodore.core.utils import send_message, DATA_DIR, local_tz
@@ -25,7 +25,7 @@ class Cache_manager:
 
     async def load_cache(self, current=False, alerts=False, forecasts=False, file_logs=False) -> Dict:
         try:
-            async with engine.begin() as conn:
+            async with get_async_session() as conn:
                 if current: query = select(Current)
                 if alerts: query = select(Alerts)
                 if forecasts: query = select(Forecasts)
@@ -37,7 +37,7 @@ class Cache_manager:
 
     async def create_new_cache(self, data= None, current=False, alerts=False, forecasts=False, file_logs=False, bulk_insert=False, *args) -> Dict:
         try:
-            async with engine.begin() as conn:
+            async with get_async_session() as conn:
                 if bulk_insert:
                     if not args:
                         send_message(False, message='Cannot bulk insert without tablename and list of insert-values')
@@ -58,7 +58,7 @@ class Cache_manager:
 
     async def update_cache(self, data=None, current=False, alerts=False, forecasts=False, file_logs=False, bulk_update=False, *args) -> Dict:
         try:
-            async with engine.begin() as conn:
+            async with get_async_session() as conn:
                 if bulk_update:
                     if not args:
                         return send_message(False, message='Cannot bulk update without tablename and list of insert-values')

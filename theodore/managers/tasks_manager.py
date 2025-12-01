@@ -2,7 +2,7 @@ from theodore.core.utils import send_message, parse_date, base_logger, user_erro
 from theodore.core.theme import cli_defaults, console
 from sqlalchemy import insert, update, delete, select
 from sqlalchemy.exc import SQLAlchemyError
-from theodore.models.base import engine
+from theodore.models.base import get_async_session
 from datetime import datetime, timezone
 from theodore.models.tasks import Tasks
 
@@ -13,7 +13,7 @@ class Task_manager():
 
     async def new_task(self, title: str = None, description: str = None, status: str = None, remind: str = None, due: datetime = None):
         try:
-            async with engine.begin() as conn:
+            async with get_async_session() as conn:
                 if not title.strip():
                     return send_message(False, message='Invalid title cannot set null title')
                 
@@ -51,7 +51,7 @@ class Task_manager():
         base_logger.debug(f'Task updates to be updated {update_values}')
         try:
             base_logger.internal('Starting connection with database')
-            async with engine.begin() as conn:
+            async with get_async_session() as conn:
                 base_logger.internal('Getting task objects from db to be updated')
                 stmt = (update(Tasks)
                         .where(
@@ -83,7 +83,7 @@ class Task_manager():
         task_ids = normalize_ids(task_id, ids)
         try:
             base_logger.internal('Starting connection with database')
-            async with engine.begin() as conn:
+            async with get_async_session() as conn:
                 base_logger.internal('Preparing delete statement')
                 stmt = delete(Tasks).where(Tasks.c.is_deleted.is_(True))
                 msg = 'Task(s) deleted'
@@ -115,7 +115,7 @@ class Task_manager():
         task_ids = normalize_ids(task_id, ids)
         try:
             base_logger.internal('Starting connection with database')
-            async with engine.begin() as conn:
+            async with get_async_session() as conn:
                 base_logger.internal('Preparing move to trash statement')
                 stmt = update(Tasks).where(Tasks.c.is_deleted.is_(False))
                 msg = f'Trashed all tasks'
@@ -162,7 +162,7 @@ class Task_manager():
         task_ids = normalize_ids(task_id, ids)
         try:
             base_logger.internal('Starting connection with database')
-            async with engine.begin() as conn:
+            async with get_async_session() as conn:
                 base_logger.internal('Preparing restore statement')
                 stmt = update(Tasks).where(Tasks.c.is_deleted.is_(True))
                 if all:
@@ -200,7 +200,7 @@ class Task_manager():
 
     async def search_tasks(self, keyword) -> dict: 
         try:
-            async with engine.begin() as conn:
+            async with get_async_session() as conn:
                 base_logger.internal('Creating search statement')
                 stmt = (select(Tasks)
                         .where(
@@ -232,7 +232,7 @@ class Task_manager():
     async def get_tasks(self, task_id: int = None, ids: list = None, status: str = None, deleted=None, **date_args) -> dict:
         task_ids = normalize_ids(task_id, ids)
         try:
-            async with engine.begin() as conn:
+            async with get_async_session() as conn:
                 base_logger.internal('Preparing list query')
                 base_logger.internal('Applying list filters')
                 if deleted:
