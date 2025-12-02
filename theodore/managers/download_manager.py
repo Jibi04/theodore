@@ -1,10 +1,8 @@
 import asyncio, aiofiles, httpx, tempfile, re
-from sqlalchemy import update
 from theodore.core.logger_setup import base_logger
 from theodore.managers.configs_manager import Configs_manager
-from theodore.core.utils import send_message, user_success, user_error, user_info, local_tz
+from theodore.core.utils import send_message, user_success, user_error, user_info, local_tz, DB_tasks
 from theodore.models.downloads import file_downloader
-from theodore.models.base import get_async_session
 from datetime import datetime
 from fake_user_agent import user_agent
 from pathlib import Path
@@ -61,22 +59,20 @@ class Downloads_manager:
     def stop_download(cls, filename):
         file = downloading_marker_path(filename)
         if file.exists():
-            file.unlink
+            file.unlink()
 
-    async def update_client(self, filename, filepath):
-        stmt = (update(file_downloader)
-                .where(file_downloader.c.filename==filename)
-                .values(
-                is_downloaded=True,
-                date_downloaded=datetime.now(local_tz)
-                ))
-        
-        async with get_async_session() as session:
-            await session.execute(stmt)
+    @classmethod
+    async def update_client(cls, filename, filepath):
+        with DB_tasks(file_downloader) as manager:
+            conditions = dict(filename=filename)
+            values = [
+                {"is_downloaded": True, "date_downloaded": datetime.now(local_tz)}
+                ]
+            await manager.update_features(values=values, and_conditions=conditions)
         user_success(f'{filename} download complete!')
 
     @classmethod
-    async def download_movie(cls, url: str, filepath: Path|str, filename: str=None, chunksize: int=8192, retries: int=10) -> dict:
+    async def download_movie(cls, url: str, filepath: Path | str, filename: str=None, chunksize: int=8192, retries: int=10) -> dict:
         
         filepath = Path(filepath).expanduser()
         base_logger.internal('Preparing file directory for download')
@@ -106,16 +102,16 @@ class Downloads_manager:
                     downloaded_bytes = filepath.stat().st_size
                 except OSError:
                     downloaded_bytes = 0
-
             headers = {"Range": f"bytes={downloaded_bytes}-"} if downloaded_bytes > 0 else None
+
             # Mode determines if we are appending ('ab') or starting fresh ('wb')
             mode = 'ab' if downloaded_bytes > 0 else 'wb'
+
             async with httpx.AsyncClient(timeout=30) as client:
                 try:
                     # FIX 3: Use client.stream() method
+                    print('got here', url)
                     async with client.stream('GET', url=url, headers=headers) as response:
-                        user_success(f'Downloading {filename} Attempt {attempt}/{retries}: starting request')
-                        
                         response.raise_for_status()
                         code = response.status_code
                         
@@ -133,32 +129,38 @@ class Downloads_manager:
                         # 1. Determine total size from headers
                         content_range = response.headers.get('Content-Range')
                         content_length = response.headers.get('Content-Length', '0')
-                        
-                        if code == 206 and content_range:
+                        if content_range:
                             expected_total = int(content_range.split('/')[-1])
-                            current_segment_start = downloaded_bytes
-                        elif code == 200:
-                            expected_total = int(content_length)
-                            current_segment_start = 0 # Starting from scratch
                         else:
                             # Fallback if range/length are missing
                             expected_total = downloaded_bytes + int(content_length) 
-                            current_segment_start = downloaded_bytes
+
+                        if code == 200:
+                            expected_total = int(content_length)
+                        elif code == 416:
+                            if filepath.stat().st_size == expected_total:
+                                # download complete
+                                cls.update_client(filename=filename, filepath=filepath)
+                                return
+                        elif code == 302:
+                            # start over File corrupted
+                            continue       
 
                         if downloaded_bytes < expected_total and expected_total > 0:
                             total_size = expected_total
                             
                             async with aiofiles.open(filepath, mode=mode) as f:
                                 with tqdm(
-                                    initial=downloaded_bytes, # Start from the previously downloaded bytes
-                                    total=total_size,        # The total expected size
+                                    initial=downloaded_bytes,
+                                    total=total_size,        
                                     desc=f"Downloading {filename}",
                                     unit='B',
                                     unit_scale=True,
                                     disable=(total_size == 0)
                                 ) as t:
                                     # set download marker
-                                    cls().start_download(filename)
+                                    cls.start_download(filename)
+                                    user_success(f'Downloading {filename} Attempt {attempt}/{retries}: starting request')
 
                                     # Use aiter_bytes() with chunksize from the function argument
                                     async for chunk in response.aiter_bytes(chunk_size=chunksize):
@@ -175,7 +177,7 @@ class Downloads_manager:
                                         if cancel_marker.exists():
                                             user_error(f'Download cancelled for {filename}')
                                             await aiofiles.os.remove(filepath)
-                                            cls().stop_download()
+                                            cls.stop_download()
                                             user_info(f'Download cancelled for {filename}')
                                             return
                                         
@@ -198,37 +200,39 @@ class Downloads_manager:
                                 continue # Go to the next retry attempt
                             else:
                                 user_success(f"Download complete for {filename}.")
-                                await cls().update_client(filename=filename) 
+                                await cls.update_client(filename=filename, filepath=filepath) 
                                 
                                 # remove marker for download
-                                cls().stop_download(filename)
+                                cls.stop_download(filename)
                                 return
-                except httpx.ConnectTimeout:
-                    user_error(f"Connection timeout during download of {filename}. Attempting retry {attempt + 1}/{retries}...")
+                except (httpx.ConnectTimeout, httpx.ConnectError, httpx.ReadError, httpx.WriteError) as err:
+                    user_error(f"{type(err).__name__} during download of {filename}. Attempting retry {attempt + 1}/{retries}...")
                     base_logger.internal("HTTPX timeout occurred.")
-                    await asyncio.sleep(2 ** attempt) # Exponential backoff
-                    continue
+                    await asyncio.sleep(2 ** attempt)
                 except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 403:
+                        condition = dict(filename=filename)
+                        with DB_tasks(file_downloader) as manager:
+                            await manager.delete_features(and_conditions=condition)
+                            user_error('Unable to download {} link forbidden.'.format(filename))
+                        return
                     user_error(f"HTTP error {e.response.status_code} for {filename}. Attempting retry {attempt + 1}/{retries}...")
                     base_logger.internal(f"HTTPX Status Error: {e.response.status_code}")
                     await asyncio.sleep(2 ** attempt)
-                    continue
                 except KeyboardInterrupt:
                     user_info('Keyboard Interupt Aborting...')
                     await asyncio.sleep(0.7)
-                    cls().cancel_download()
+                    cls.cancel_download(filename)
                     return
                 except Exception as e:
-                    user_error(f"An unexpected error occurred during download of {filename}: {e}. Stopping...")
+                    user_error(f"An unexpected error occurred while downloading {filename}: {type(e).__name__} Stopping...")
                     await asyncio.sleep(1)
-                    cls().cancel_download()
+                    cls.cancel_download(filename)
                     raise
-                finally:
-                    cls().cancel_download()
 
         # If the loop finishes without success
         user_error(f"Failed to download {filename} after {retries} attempts.")
-        cls().cancel_download()
+        cls.cancel_download(filename)
         return
             
 
