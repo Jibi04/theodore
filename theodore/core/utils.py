@@ -274,7 +274,7 @@ class Downloads:
         try:
             async with get_async_session() as session:
                 with DB_tasks(self.file_downloader) as db_manager:
-                    db_manager.insert_features(values=values)
+                    await db_manager.insert_features(values=values)
                     return  
         except SQLAlchemyError:
             raise
