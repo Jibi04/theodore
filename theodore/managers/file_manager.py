@@ -101,7 +101,7 @@ class File_manager:
             "timestamp": datetime.datetime.now(local_tz).isoformat()
         }
         old = []
-        if LOG_FILE.exists():
+        if LOG_FILE.exists():       
             try:    
                 old = json.loads(LOG_FILE.read_text())
             except json.JSONDecodeError:
@@ -302,7 +302,6 @@ class File_manager:
             destination = dst / src.name
 
             shutil.move(src, destination)
-            self.log_move(src, destination)
             user_success(f'Moved {src.name} from [cyan]{src.parent.name}[/] to [cyan]{destination.parent.name}[/]')
             return
         except Exception as exc:
