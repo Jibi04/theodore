@@ -1,6 +1,7 @@
 import dateparser 
 import re
 from rich.table import Table
+from sqlalchemy import Table as sql_table
 from pathlib import Path
 from theodore.core.logger_setup import base_logger, error_logger
 import tempfile
@@ -107,7 +108,9 @@ class DB_tasks:
     """
     Write, update, delete, select rows and feartures from your db, Asynchronously
     """
-    def __init__(self, table: Table):
+    def __init__(self, table: sql_table):
+        if not isinstance(table, sql_table):
+            raise AttributeError(f"This table is not an sql_table instance {type(table)}")
         self.table = table
 
     def __enter__(self):
@@ -118,18 +121,15 @@ class DB_tasks:
                 return []
             
             conditionals = []
-            try:
-                for key, value in conditions_dict.items():
-                    Column = getattr(self.table, key)
-                    if Column: 
-                        conditionals.append(Column == value)
-                return conditionals
-            except AttributeError as e:
-                raise AttributeError(
-                    f"Column '{key}' non-existent on table '{self.table.name}'. "
-                    f"Original Error: {e}"
-                    )
-
+            for key, value in conditions_dict.items():
+                if hasattr(self.table.c, key):
+                    Column = getattr(self.table.c, key)
+                    conditionals.append(Column == value)
+                else:
+                    raise AttributeError(
+                        f"Column '{key}' non-existent on table '{self.table.name}'. "
+                        )
+            return conditionals
     def _sort_conditions(self, and_conditions: dict, or_conditions: dict) -> list:
         """
         Sorts all conditions and returns a final conditions
@@ -148,12 +148,12 @@ class DB_tasks:
 
         return final_conditions
 
-    async def get_features(self, and_conditions: dict = None, or_conditions: dict = None) -> list[tuple]:
+    async def get_features(self, and_conditions: dict = None, or_conditions: dict = None, first=False) -> list[tuple]:
         """
         select the values of your in your Database
         reuturns a list of query tuples
         """
-        if not isinstance(self.table, Table):
+        if not isinstance(self.table, sql_table):
             raise TypeError(f"Expected a Table class got {type(self.table)}.")
         
         stmt = select(self.table)
@@ -163,15 +163,18 @@ class DB_tasks:
         async with get_async_session() as session:
             try:
                 results = await session.execute(stmt)
-                return results.all()
+                if first:
+                    return results.first()
+                else:
+                    return results.all()
             except Exception as e:
                 user_error(f'Database Select Query Failed: {e}')
                 await session.rollback()
                 raise
 
-    async def update_features(self, values: list[dict], and_conditions: dict = None, or_conditions: dict = None) -> None:
+    async def update_features(self, values: dict, and_conditions: dict = None, or_conditions: dict = None) -> None:
         """update values in your db and commits asynchronously"""
-        if not isinstance(self.table, Table):
+        if not isinstance(self.table, sql_table):
             raise TypeError(f"Expected a Table class got {type(self.table)}.")
         
         stmt = update(self.table)
@@ -191,7 +194,7 @@ class DB_tasks:
 
     async def insert_features(self, values: list[dict]) -> list[tuple]:
         """update values in your db and commits asynchronously"""
-        if not isinstance(self.table, Table):
+        if not isinstance(self.table, sql_table):
             raise TypeError(f"Expected a Table class got {type(self.table)}.")
         
         stmt = insert(self.table)
@@ -209,7 +212,7 @@ class DB_tasks:
 
     async def delete_features(self, and_conditions: dict, or_conditions: dict):
         """deletes db rows commits asynchronously"""
-        if not isinstance(self.table, Table):
+        if not isinstance(self.table, sql_table):
             raise TypeError(f"Expected a Table class got {type(self.table)}.")
         
         stmt = delete(self.table)
@@ -242,15 +245,22 @@ class DB_tasks:
 
 
 class Downloads:
-    def __init__(self, downloader_class):
-        self.file_downloader = downloader_class
+    def __init__(self, table: sql_table):
+        self.file_downloader = table
 
-    def parse_url(self, url: str) -> str:
+    def parse_url(self, url: str, full_path: Path=None) -> dict:
         """
         Parses urls using unqote and urlparse
         return url filename
         """
-        return Path(unquote(urlparse(url).path)).name
+        return_map = {}
+
+        url_name = Path(unquote(urlparse(url).path)).name
+        return_map['url'] = url
+        return_map['filename'] = url_name
+        if full_path: return_map['filepath'] = full_path / url_name
+        
+        return return_map
 
     async def get_undownloaded_urls(self) -> list[str] | list:
         """
@@ -258,10 +268,32 @@ class Downloads:
         returns list
         """
         async with get_async_session() as session:
-            stmt = select(self.file_downloader.c.url).where(self.file_downloader.c.is_downloaded.is_(False))
+            stmt = (select(self.file_downloader.c.url)
+                    .where(
+                        self.file_downloader.c.is_downloaded.is_(False)
+                        )
+                    )
             result = await session.execute(stmt)
             return result.scalars().all()
         return []
+    
+    async def get_download_status(self, conditions):
+        """get a single feature"""
+        if not isinstance(self.table, sql_table):
+            raise TypeError(f"Expected a Table class got {type(self.table)}.")
+        final_conditions = []
+        for key, val in conditions.items():
+            if hasattr(self.file_downloader.c, key):
+                Column = getattr(self.file_downloader, key)
+                final_conditions.append(Column == val)
+            else:
+                raise AttributeError(
+                    f"Column '{key}' non-existent on table '{self.table.name}'. "
+                    )
+        async with get_async_session() as session:
+            stmt = (select(self.file_downloader.c.download_percentage).where(*final_conditions).limit(1))
+            response = await session.execute(stmt)
+            return response.scalar_one_or_none()
 
     async def bulk_insert(self, table: Table, values: list[dict]) -> None:
         """
@@ -272,19 +304,22 @@ class Downloads:
         returns None
         """
         try:
-            async with get_async_session() as session:
-                with DB_tasks(self.file_downloader) as db_manager:
-                    await db_manager.insert_features(values=values)
-                    return  
+            with DB_tasks(table) as db_manager:
+                await db_manager.insert_features(values=values)
         except SQLAlchemyError:
             raise
         
     async def get_full_name(self, filename):
         async with get_async_session() as session:
-            stmt = select(self.file_downloader.c.filename.ilike(f'{filename}%')).where(self.file_downloader.c.is_downloaded.is_(False))
+            stmt = (select(self.file_downloader.c.filename)
+                    .where(
+                        self.file_downloader.c.filename.ilike(f'{filename}%'),
+                        self.file_downloader.c.is_downloaded.is_(False)
+                        )
+                    .limit(1)
+                )
             results = await session.execute(stmt)
-        filenames = results.scalars().all()
-        return filenames
+            return results.scalar_one_or_none()
     
     def __repr__(self):
         return f"Downloads(table={self.file_downloader.name})"
