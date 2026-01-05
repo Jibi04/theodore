@@ -35,7 +35,7 @@ Alerts = Table(
     Column('description', String),
     Column('instructions', String),
     Column("country", String),
-    Column('city', ForeignKey('Current.city')),
+    Column('city', ForeignKey('current.city')),
     Column('time_requested', DateTime(timezone=local_tz), default=datetime.now(local_tz)),
 )
 
@@ -61,7 +61,7 @@ Forecasts = Table(
     Column("daily_will_it_rain", String),
     Column("daily_will_it_snow", String),
     Column("country", String),
-    Column('city', ForeignKey('Current.city')),
+    Column('city', ForeignKey('current.city')),
     Column('time_requested', DateTime(timezone=local_tz), default=datetime.now(local_tz)),
 )
 

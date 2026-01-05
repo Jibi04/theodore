@@ -6,8 +6,10 @@ from datetime import datetime
 from rich.table import Table
 from theodore.core.theme import console
 from theodore.core.logger_setup import base_logger
-from theodore.core.utils import send_message, DATA_DIR, user_error
+from theodore.core.utils import send_message, DATA_DIR, user_error, DB_tasks
 from theodore.models.base import engine
+from theodore.models.configs import Configs_table
+from theodore.models.weather import Current, Alerts, Forecasts
 from theodore.managers.configs_manager import Configs_manager
 from theodore.managers.cache_manager import Cache_manager
 from httpx import ConnectTimeout, ReadTimeout, ReadError, DecodingError
@@ -35,14 +37,14 @@ class Weather_manager:
 
         """
         base_logger.internal('Attempting weather request')
-
+        with DB_tasks(Configs_table) as config_manager:
+            defaults = await config_manager.get_features({'category': 'weather'}, first=True)
         if location is None:
-            configs = manager.load_file(config=True)
-            location = configs.get('weather', {}).get('default_location')
-
+            location = defaults.default_location
             if not location:
                     user_error.error("Unable to fetch no location to query weather data from.")
                     return send_message(False, message='no location')
+            
         base_logger.debug(f'Location loaded - {location}')
 
         ttl = 60 * 30
@@ -62,7 +64,7 @@ class Weather_manager:
         with console.status(f'Fetching weather data for {location.capitalize()}', spinner='arc'):
             for attempt in range(retries + 1):
                 try:
-                    API_KEY  = os.getenv('weather_api_key')
+                    API_KEY  = os.getenv('weather_api_key') or defaults.api_key
                     if not API_KEY:
                         base_logger.internal("[!] Missing environment variable: 'weather_api_key' aborting")
                         return send_message(False, message="Missing environment variable: 'weather_api_key'")
@@ -79,9 +81,7 @@ class Weather_manager:
                     async with httpx.AsyncClient(timeout=30) as client:
                         base_logger.internal('awaiting response from client')
                         response = await client.get(url=url, params=params, headers=headers)
-                        base_logger.debug(f'Client request response {response}')
                         response.raise_for_status() 
-                        base_logger.debug('Client didn\'t raise any errors')
                         data = response.json()
                         base_logger.debug(f'weather data jsonified {data}')
                 except (ConnectTimeout, ReadTimeout, ReadError,) as e:

@@ -96,6 +96,25 @@ def get_task_table(data, deleted=False):
 def get_current_weather_table(**kwargs):
     pass
 
+def get_configs_table(data):
+    table = Table()
+    table.min_width = 100
+    table.title = 'Tasks'
+    table.show_lines = True
+
+    table.add_column('[bold]category[/]', no_wrap=True)
+    table.add_column('[bold]default_path[/]', no_wrap=True)
+    table.add_column('[bold]location[/]', no_wrap=True)
+    table.add_column('[bold]api_key[/]', no_wrap=True)
+
+    for row in data:
+        table.add_row(
+            row.category.capitalize(), 
+            row.default_path, 
+            row.default_location, 
+            row.api_key if row.api_key else '[magenta bold]Not set[/]'
+        )
+    return table
 
 def get_current_weather_table(**kwargs):
     pass
@@ -149,10 +168,7 @@ class DB_tasks:
         return final_conditions
 
     async def get_features(self, and_conditions: dict = None, or_conditions: dict = None, first=False) -> list[tuple]:
-        """
-        select the values of your in your Database
-        reuturns a list of query tuples
-        """
+        """Queries your DB Using SELECT with conditions as WHERE if conditions are None, returns all rows in the DB"""
         if not isinstance(self.table, sql_table):
             raise TypeError(f"Expected a Table class got {type(self.table)}.")
         
@@ -166,7 +182,8 @@ class DB_tasks:
                 if first:
                     return results.first()
                 else:
-                    return results.all()
+                    rows = results.all()
+                    return rows
             except Exception as e:
                 user_error(f'Database Select Query Failed: {e}')
                 await session.rollback()
