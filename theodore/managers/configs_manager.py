@@ -134,11 +134,9 @@ class Configs_manager:
             if default_path: data_map['default_path'] = default_path
 
             async with get_async_session() as conn:
-                base_logger.internal('preparing save config statement')
                 stmt = update(Configs).where(Configs.c.category == category)
                 stmt = stmt.values(**data_map)
 
-                base_logger.internal('Preparing to execute')
                 result = await conn.execute(stmt.returning(Configs.c.category, Configs.c.default_location, Configs.c.default_path))
                 updated_configs = result.mappings().all() # print('got here')   
                 base_logger.internal(f'{result.rowcount} updates done: {updated_configs}')

@@ -18,14 +18,13 @@ def task_manager(ctx):
 
 
 @task_manager.command(cls=AsyncCommand)
-@optgroup.group('required options', cls=RequiredAllOptionGroup)
-@optgroup.option('--title', '-t', type=str)
+@click.option('--title', '-t', type=str, help="task title", required=True)
 @click.option('--description', '-d', type=str, help='comma separated text')
 @click.option('--status', '-s', type=click.Choice(['pending', 'in_progress', 'completed', 'not_completed']), help='task status')
 @click.option('--due', type=str, help='task due-date format(yyyy-mm-dd H:M:S, next-week, tommorow, 9am monday)')
 @click.option('--remind', is_flag=True, help='set reminder')
 @click.pass_context
-async def new(ctx, title, description, status, due, remind):
+async def new(ctx, title: str, description: str, status: str, due: str, remind: bool):
     """Create new task"""
     base_logger.internal('getting manager from task manager')
     manager = ctx.obj['task_manager']
@@ -90,14 +89,12 @@ async def new(ctx, title, description, status, due, remind):
 @optgroup.option('--title', '-t', type=str)
 @optgroup.option('--task-id', '-tid', type=int)
 @click.option('--description', '-d',type=str, help='comma separated text')
-# @click.option('--due', type=str, help='task due-date format(yyyy-mm-dd H:M:S, next-week, tommorow, 9am monday)')
 @click.option('--status', type=click.Choice(['pending', 'in_progress', 'completed', 'not_completed']), help='task status')
 @click.pass_context
 async def update(ctx, **kwargs):
     """Update task data id, title, tags, status, due date"""
     base_logger.internal('loading task manager')
     manager = ctx.obj['task_manager']
-    
     base_logger.internal('updating args map')
     args_map = kwargs
 
@@ -126,7 +123,7 @@ async def update(ctx, **kwargs):
 
 
 @task_manager.command(cls=AsyncCommand)
-@optgroup.group('list options', cls=RequiredMutuallyExclusiveOptionGroup)
+@optgroup.group('list filters', cls=RequiredMutuallyExclusiveOptionGroup)
 @optgroup.option('--all', '-a', is_flag=True, help='Get all tasks in')
 @optgroup.option('--deleted', '-d', is_flag=True, help='List all deleted tasks')
 @optgroup.option('-created-before', help='return list created before date')
@@ -170,7 +167,7 @@ async def list(ctx, all, deleted, **kwargs):
 
 
 @task_manager.command(cls=AsyncCommand)
-@click.option('--keyword', '-kw', help='keyword to search for')
+@click.option('--keyword', '-kw', type=str, help='keyword to search for')
 @click.pass_context
 async def search(ctx, keyword):
     """Search for keyword in tags and title"""
@@ -199,8 +196,8 @@ async def search(ctx, keyword):
 
 @task_manager.command(cls=AsyncCommand)
 @optgroup.group('trash options', cls=RequiredMutuallyExclusiveOptionGroup)
-@optgroup.option('--title', '-t', help='task title to delete')
-@optgroup.option('--all', '-a', is_flag=True, help='move all tasks to trash')
+@optgroup.option('--title', '-t', type=str, help='task title to delete')
+@optgroup.option('--all', '-a', is_flag=True, type=bool, help='move all tasks to trash')
 @optgroup.option('--task_id', '-tid', type=int)
 @optgroup.option('-ids', type=str, help='comma separated ids')
 @click.pass_context
