@@ -24,7 +24,7 @@ def config(ctx):
 @optgroup.option("--default-location", "-l", type=str, help='Set default weather location')
 @optgroup.option("--api-key", "-api-key", type=str)
 @optgroup.option("--default-path", "-p")
-@click.argument("category", type=click.Choice(['weather', 'downloads', 'tasks']))
+@click.argument("category", type=str)
 @click.pass_context
 async def set(ctx, default_location, api_key, default_path, category):
     base_logger.internal('Getting option from ctx manager')
@@ -40,7 +40,7 @@ async def set(ctx, default_location, api_key, default_path, category):
         args_map['default_path'] = path_str
 
     try:
-        response = await configs_manager.new_category(args_map)
+        response = await configs_manager.upsert_category(args_map)
         if not response.get('ok', None):
             user_error(response.get('message', 'An error occured whilst setting new configs please try again later'))
             return
@@ -54,7 +54,7 @@ async def set(ctx, default_location, api_key, default_path, category):
 @optgroup.option("--default-location", "-l", type=str, help='Set default weather location')
 @optgroup.option("--api-key", "-api-key", type=str)
 @optgroup.option("--default-path", "-p")
-@click.argument("category", type=click.Choice(['weather', 'downloads', 'tasks']))
+@click.argument("category", type=str)
 @click.pass_context
 async def update(ctx, default_location, api_key, default_path, category):
     base_logger.internal('Getting option from ctx manager')
@@ -73,7 +73,7 @@ async def update(ctx, default_location, api_key, default_path, category):
     }
 
     try:
-        response = await configs_manager.update_category(cols_to_update)
+        response = await configs_manager.upsert_category(cols_to_update)
         if not response.get('ok', None):
             user_error(response.get('message', 'An error occured whilst updating configs settings please try again later'))
             return

@@ -227,7 +227,7 @@ class DB_tasks:
                 await session.rollback()
                 raise
 
-    async def delete_features(self, and_conditions: dict, or_conditions: dict):
+    async def delete_features(self, and_conditions: dict, or_conditions: dict) -> None:
         """deletes db rows commits asynchronously"""
         if not isinstance(self.table, sql_table):
             raise TypeError(f"Expected a Table class got {type(self.table)}.")
@@ -246,6 +246,13 @@ class DB_tasks:
                 user_error(f'Database Delete Query Failed: {e}')
                 await session.rollback()
                 raise
+
+    async def exists(self, **kwargs) -> bool:
+        async with get_async_session() as session:
+            stmt = select(1).select_from(self.table).filter_by(**kwargs).limit(1)
+            result = await session.execute(stmt)
+            return result.scalar() is not None
+
 
     def __repr__(self):
         return f"DB_tasks(table={self.table.name})"

@@ -3,22 +3,20 @@ from theodore.models.configs import Configs_table
 from theodore.core.utils import user_error, send_message, DB_tasks, get_configs_table
 
 class Configs_manager:
-    async def new_category(self, data: dict) -> dict:
+    async def upsert_category(self, data: dict) -> dict:
         try:
             with DB_tasks(Configs_table) as configs_manager:
-                await configs_manager.insert_features([data])
+                category = data.get('category')
+                feature = await configs_manager.exists(category=category)
+
+                if feature:
+                    await configs_manager.update_features(data, and_conditions={'category': category})
+                else:
+                    await configs_manager.insert_features([data])
                 return send_message(True, message='done')
         except Exception as e:
             raise
     
-    async def update_category(self, data: dict) -> dict:
-        try:
-            with DB_tasks(Configs_table) as configs_manager:
-                await configs_manager.update_features(data, and_conditions={'category': data.get('category')})
-                return send_message(True, message='done')
-        except Exception as e:
-            raise
-
     async def show_configs(self, args_map) -> dict:
         try:
             with DB_tasks(Configs_table) as configs_manager:
