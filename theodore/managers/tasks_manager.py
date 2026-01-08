@@ -1,4 +1,4 @@
-from theodore.core.utils import send_message, parse_date, base_logger, user_error, normalize_ids
+from theodore.core.utils import send_message, parse_date, base_logger, user_error, normalize_ids, DB_tasks
 from theodore.core.theme import cli_defaults, console
 from sqlalchemy import insert, update, delete, select
 from sqlalchemy.exc import SQLAlchemyError
@@ -10,27 +10,17 @@ from theodore.models.tasks import Tasks
 cli_defaults()
 
 class Task_manager():
+    def __init__(self):
+        self.db_manager = DB_tasks(Tasks)
 
-    async def new_task(self, title: str = None, description: str = None, status: str = None, remind: str = None, due: datetime = None) -> dict:
+    async def new_task(self, **other_values) -> dict:
         try:
-            async with get_async_session() as conn:
-                if not title.strip():
-                    return send_message(False, message='Invalid title cannot set null title')
-                
-                stmt = insert(Tasks).values(title=title, description=description, status=status, due=due)
-                response = await conn.execute(stmt.returning(Tasks.c.task_id, Tasks.c.title))
-                task_info = response.mappings().all()
-
-                if not task_info:
-                    base_logger.internal('Db returned a zero row count unable to create new task')
-                    return send_message(False, "unable to create new task.")
-                
-                base_logger.debug(f'New task created: {task_info}')
-                return send_message(True, message='New Task Created')
+            await self.db_manager.upsert_features(values=other_values)
+            return send_message(True, message='New Task Created')
         except SQLAlchemyError as e:
             base_logger.internal('Database Error Aborting ...')
             user_error(f'SQLAlchemyError: {e}')
-            return send_message(False, 'Task not updated')
+            return send_message(False, 'Task not Created')
 
         except Exception as e:
             base_logger.internal('An unknown error occurred Aborting ...')

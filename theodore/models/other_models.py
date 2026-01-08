@@ -24,13 +24,3 @@ File_logs = Table(
     Column('timestamp', DateTime(timezone=local_tz)),
 )
 
-def create_table():
-    try:
-        base_logger.internal('Creating configs table')
-
-        asyncio.run(create_tables())
-        base_logger.internal('Other tables created')
-    except Exception as e:
-        error_logger.exception(e)
-
-create_table()

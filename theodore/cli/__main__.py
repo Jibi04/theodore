@@ -35,7 +35,7 @@ def theodore(ctx, verbose):
     ctx.obj['download_manager'] = Downloads_manager()
     ctx.obj['file_manager'] = File_manager()
 
-    base_logger.internal("Theodore Initalized")
+    base_logger.internal("Theodore Initialized")
 
 @click.group()
 @click.pass_context

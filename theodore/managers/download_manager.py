@@ -11,7 +11,8 @@ from tqdm.asyncio import tqdm
 
 # --- Global Setup ---
 ua = user_agent()
-manager = Configs_manager()
+config_manager = Configs_manager()
+db_manager = DB_tasks(file_downloader)
 
 class Downloads_manager:
 
@@ -74,24 +75,17 @@ class Downloads_manager:
     async def update_status(self, filename: str, filepath: Path, total_size: int) -> None:
         """updates the database filesize percentage for querying download status"""
         downloaded_percentage = round((filepath.stat().st_size / total_size) * 100, 1)
-        with DB_tasks(file_downloader) as db_manager:
-            await db_manager.update_features(
-                values=
-                    {
-                        'download_percentage': downloaded_percentage,
-                        'filepath': str(filepath)
-                    }, 
-                and_conditions={'filename': filename})
-            return
+        await db_manager.upsert_features(
+            values = {'download_percentage': downloaded_percentage,'filepath': str(filepath)}, 
+            primary_key={'filename': filename}
+        )
+        return
 
     async def update_client(self, filename: str, filepath: Path) -> None:
         """Updates the database entry on successful download."""
-        with DB_tasks(file_downloader) as db_manager:
-            conditions = {'filename':filename}
-            values = [
-                {"is_downloaded": True, "date_downloaded": datetime.now(local_tz)}
-                ]
-            await db_manager.update_features(values=values, and_conditions=conditions)
+        conditions = {'filename':filename}
+        values = {"is_downloaded": True, "date_downloaded": datetime.now(local_tz)}
+        await db_manager.upsert_features(values=values, primary_key=conditions)
         user_success(f'{filename} download complete and database updated!')
         return
 
@@ -211,17 +205,17 @@ class Downloads_manager:
                         if status_code == 403:
                             # Permanent forbidden error
                             condition = dict(filename=filename)
-                            with DB_tasks(file_downloader) as db_manager:
-                                await db_manager.delete_features(and_conditions=condition)
-                                user_error(f'Unable to download {filename}: link forbidden (403).')
+                            await db_manager.delete_features(and_conditions=condition)
+                            user_error(f'Unable to download {filename}: link forbidden (403).')
                             return
                         elif status_code == 302:
-                                url = response.headers.get('Location', None)
-                                if url is None:
-                                    user_error('URL moved to another Location, unable to reach')
-                                    return
-                                user_error(f'Url moved to another location trying out \'{url}\'')
-                                continue
+                            user_error('URL moved to another Location, Check updated URL and try again.')
+                            await self.stop_download(filename=filename, filepath=filepath)
+                            print('stop came back')
+                            print('calling delete')
+                            await db_manager.delete_features(and_conditions={'filepath': str(filepath)})
+                            print('delete came back')
+                            return
                         elif status_code == 416:
                             if filepath.exists() and filepath.stat().st_size == total_size: # Assuming total_size was set previously or correctly inferred
                                 user_success(f"File {filename} already fully downloaded (416 received).")
@@ -250,4 +244,9 @@ class Downloads_manager:
         finally:
             self.active_events.pop(filename, None)
             self.cancel_flags.pop(filename, None)
-        return
+    
+        stmt = """SELECT 1 FROM download_manager WHERE filename = :filename AND is_downloaded = 0 LIMIT 1"""
+        var_map = {'filename': filename}
+        downloaded = await db_manager.run_query(stmt=stmt, sudo=True, var_map=var_map, one=True)
+        if not downloaded.get('data'):
+            user_error(f"An unexpected error occurred while downloading {filename}. Download Stopped.")

@@ -32,6 +32,8 @@ vosk = "^0.3.45"
 aiosqlite = "^0.21.0"
 httpx = "^0.28.1"
 aiofiles = "^25.1.0"
+pydantic = {extras = ["email"], version = "^2.12.5"}
+alembic = "^1.17.2"
 
 [tool.poetry.scripts]
 theodore = "theodore.cli.__main__:theodore"
