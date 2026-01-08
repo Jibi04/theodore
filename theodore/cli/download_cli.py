@@ -67,6 +67,7 @@ async def file(ctx: click.Context, url: str, resume: bool) -> None:
         user_info('No unfinished downloads to resume.')
         return
     server = await manager.start_server()
+    response = "Before start"
     try:
         
         # bulk insert
@@ -86,13 +87,14 @@ async def file(ctx: click.Context, url: str, resume: bool) -> None:
             tasks.append(manager.download_movie(url, full_path, url_path_name))
         if tasks:
             user_success(f'Starting {len(tasks)} download(s)...')
-            await asyncio.gather(*tasks, return_exceptions=True)
+            response = await asyncio.gather(*tasks, return_exceptions=True)
     finally:
         server.close()
         await server.wait_closed()
         socket_file = Path(manager.socket_path)
         if socket_file.exists():
             socket_file.unlink()
+    print("this is file response", response)
     return
 
 @downloads.command(cls=AsyncCommand)

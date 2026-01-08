@@ -5,7 +5,7 @@ import asyncio
 
 
 Configs_table = Table(
-    'Configs',
+    'configs',
     meta,
     Column('category', String, primary_key=True, nullable=False),
     Column('default_path', String(100)),
@@ -22,4 +22,4 @@ def create_table():
     except Exception as e:
         error_logger.exception(e)
 
-# create_table()
+create_table()

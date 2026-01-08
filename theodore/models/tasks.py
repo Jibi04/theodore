@@ -19,23 +19,3 @@ Tasks = Table(
 )
 
 
-# Tags = Table(
-#     'tags',
-#     meta,
-#     Column('tag_id', Integer, autoincrement=True, primary_key=True),
-#     Column('description', String(500), nullable=False),
-#     Column('client_id', Integer, ForeignKey('Tasks.id'))
-# )
-
-
-def create_table():
-    try:
-        base_logger.internal('Creating tasks table(s)')
-
-        asyncio.run(create_tables())
-        base_logger.internal('Task table created')
-
-    except Exception as e:
-        error_logger.exception(e)
-
-# create_table()

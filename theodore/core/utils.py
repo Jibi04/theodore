@@ -1,5 +1,6 @@
 import dateparser 
-import re
+import re, asyncio
+from typing import Dict, Annotated, Literal
 from rich.table import Table
 from sqlalchemy import Table as sql_table
 from pathlib import Path
@@ -8,12 +9,16 @@ import tempfile
 from zoneinfo import ZoneInfo
 from urllib.parse import unquote, urlparse
 
+from functools import partial
+from pydantic import BaseModel, ConfigDict, Field
+from datetime import datetime
 
 # -------------------------
 # Global Variables 
 # -------------------------
 local_tz = ZoneInfo("GMT")
 DATA_DIR = Path(__file__).parent.parent / "data"
+
 JSON_DIR = DATA_DIR / "json"
 TEMP_DIR = Path(tempfile.gettempdir()) / "theodore_downloads"
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -120,8 +125,8 @@ def get_current_weather_table(**kwargs):
     pass
 
 from theodore.models.base import get_async_session
-from sqlalchemy import select, insert, update, delete, and_, or_
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import select, insert, update, delete, and_, or_, text
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 
 class DB_tasks:
     """
@@ -149,6 +154,7 @@ class DB_tasks:
                         f"Column '{key}' non-existent on table '{self.table.name}'. "
                         )
             return conditionals
+    
     def _sort_conditions(self, and_conditions: dict, or_conditions: dict) -> list:
         """
         Sorts all conditions and returns a final conditions
@@ -166,6 +172,24 @@ class DB_tasks:
                 final_conditions.append(or_(*or_list))
 
         return final_conditions
+    
+    async def run_query(self, stmt, sudo=True, first=False, all=False, one=False, upsert=False, var_map={}):
+        if not sudo:
+            user_warning("Error: cannot perform task not sudo!")
+            return send_message(False, message='Cannot perform task')
+        query = text(stmt)
+        async with get_async_session() as session:
+            response = await session.execute(query, var_map)
+            data = response
+            if first:
+                data = response.first()
+            elif one:
+                data = response.scalar()
+            elif all:
+                data = response.all()
+            elif upsert:
+                data = ''
+            return send_message(True, data=data)
 
     async def get_features(self, and_conditions: dict = None, or_conditions: dict = None, first=False) -> list[tuple]:
         """Queries your DB Using SELECT with conditions as WHERE if conditions are None, returns all rows in the DB"""
@@ -189,53 +213,39 @@ class DB_tasks:
                 await session.rollback()
                 raise
 
-    async def update_features(self, values: dict, and_conditions: dict = None, or_conditions: dict = None) -> None:
-        """update values in your db and commits asynchronously"""
-        if not isinstance(self.table, sql_table):
-            raise TypeError(f"Expected a Table class got {type(self.table)}.")
-        
-        stmt = update(self.table)
-        final_conditions = self._sort_conditions(and_conditions, or_conditions)
-        if final_conditions: stmt = stmt.where(*final_conditions)
+    async def upsert_features(self, values: Dict, primary_key: Dict = None) -> Dict:
+        async with get_async_session() as session:
+            try:
+                if not isinstance(values, dict):
+                    raise TypeError(f'Expected \'{dict.__name__}\' but got \'{type(values)}\'.')
+                stmt = insert(self.table).values(values)
+                await session.execute(stmt)
+            except IntegrityError:
+                key, val  = primary_key or next(iter(values), {})
+                stmt = update(self.table).where(key == val).values(values)
+                await session.execute(stmt)
+            finally:
+                await session.commit()
+                await session.close()
+            return send_message(True, message='Done!')
+
+    async def permanent_delete(self, or_conditions, and_conditions, query = None) -> None:
+        final_conditions = self._sort_conditions(or_conditions=or_conditions, and_conditions=and_conditions)
+        stmt = select(self.table).where(*final_conditions)
 
         async with get_async_session() as session:
             try:
-                stmt = stmt.values(values)
                 await session.execute(stmt)
                 await session.commit()
-                return 
-            except Exception as e:
-                user_error(f'Database Update Query Failed: {e}')
+            except SQLAlchemyError as e:
                 await session.rollback()
-                raise
+                user_error(f"Database Delete Not done: {e}")
+        return
 
-    async def insert_features(self, values: list[dict]) -> list[tuple]:
-        """update values in your db and commits asynchronously"""
-        if not isinstance(self.table, sql_table):
-            raise TypeError(f"Expected a Table class got {type(self.table)}.")
-        
-        stmt = insert(self.table)
-
-        async with get_async_session() as session:
-            try:
-                stmt = stmt.values(values)
-                await session.execute(stmt)
-                await session.commit()
-                return 
-            except Exception as e:
-                user_error(f'Database Insert Query Failed: {e}')
-                await session.rollback()
-                raise
-
-    async def delete_features(self, and_conditions: dict, or_conditions: dict) -> None:
+    async def delete_features(self, and_conditions: dict, or_conditions: dict = {}) -> None:
         """deletes db rows commits asynchronously"""
-        if not isinstance(self.table, sql_table):
-            raise TypeError(f"Expected a Table class got {type(self.table)}.")
-        
-        stmt = delete(self.table)
         final_conditions = self._sort_conditions(and_conditions, or_conditions)
-        if final_conditions: 
-            stmt = stmt.where(*final_conditions)
+        stmt = delete(self.table).where(*final_conditions)
 
         async with get_async_session() as session:
             try:
@@ -246,6 +256,7 @@ class DB_tasks:
                 user_error(f'Database Delete Query Failed: {e}')
                 await session.rollback()
                 raise
+        return
 
     async def exists(self, **kwargs) -> bool:
         async with get_async_session() as session:
@@ -351,3 +362,57 @@ class Downloads:
     def __str__(self):
         return f"table name '{self.file_downloader.name}'"
     
+class WeatherModel(BaseModel):
+    model_config = ConfigDict(extra='ignore')
+    city: str
+    country: str
+    time_requested: Annotated[datetime, Field(default_factory=partial(datetime.now, tz=local_tz))]
+
+class Current_(WeatherModel):
+    model_config = ConfigDict(extra='ignore')
+
+    text: Annotated[str | None, Field(alias='text')]
+    temp_c: Annotated[float, Field(alias='temp_c')]
+    feels_c: Annotated[float, Field(alias='feels_c')]
+    temp_f: Annotated[float, Field(alias='temp_f')]
+    feels_f: Annotated[float, Field(alias='feels_f')]
+    humidity: Annotated[str, Field(alias='humidity')]
+    wind_kph: Annotated[float, Field(alias='wind_kph')]
+    wind_mph: Annotated[float, Field(alias='wind_mph')]
+    wind_dir: Annotated[float, Field(alias='wind_dir')]
+
+class Alerts_(WeatherModel):
+    model_config = ConfigDict(extra='ignore')
+
+    headline: Annotated[str | None, Field(alias='headline')]
+    event: Annotated[str | None, Field(alias='event')]
+    certainty: Annotated[str | None, Field(alias='certainty')]
+    urgency: Annotated[str | None, Field(alias='urgency')]
+    severity: Annotated[str | None, Field(alias='severity')]
+    note: Annotated[str | None, Field(alias='note')]
+    effective: Annotated[str | None, Field(alias='effective')]
+    description: Annotated[str | None, Field(alias='description')]
+    instructions: Annotated[str | None, Field(alias='instructions')]
+
+
+class Forecast_(WeatherModel):
+    model_config = ConfigDict(extra='ignore')
+
+    sunrise: Annotated[datetime, Field(alias='sunrise')]
+    sunset: Annotated[datetime, Field(alias='sunset')]
+    moonrise: Annotated[datetime, Field(alias='moonrise')]
+    moonset: Annotated[datetime, Field(alias='moonset')]
+    min_temp_c: Annotated[float, Field(alias='min_temp_c')]
+    max_temp_c: Annotated[float, Field(alias='max_temp_c')]
+    avg_temp_c: Annotated[float, Field(alias='avg_temp_c')]
+    min_temp_f: Annotated[float, Field(alias='min_temp_f')]
+    max_temp_f: Annotated[float, Field(alias='max_temp_f')]
+    avg_temp_f: Annotated[float, Field(alias='avg_temp_f')]
+    maxwind_kph: Annotated[float, Field(alias='maxwind_kph')]
+    avgvis_km: Annotated[float, Field(alias='avgvis_km')]
+    maxwind_mph: Annotated[float, Field(alias='maxwind_mph')]
+    avgvis_miles: Annotated[float, Field(alias='avgvis_miles')]
+    daily_chance_of_rain: Annotated[float, Field(alias='daily_chance_of_rain')]
+    daily_chance_of_snow: Annotated[float, Field(alias='daily_chance_of_snow')]
+    daily_will_it_rain: Annotated[bool | int, Field(alias='daily_will_it_rain')]
+    daily_will_it_snow: Annotated[bool | int, Field(alias='daily_will_it_snow')]

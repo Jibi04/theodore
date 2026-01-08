@@ -43,6 +43,8 @@ async def new(ctx, title: str, description: str, status: str, due: str, remind: 
             
         args_map['due'] = due
 
+        args_map = {key: val for key, val in args_map.items() if val is not None}
+        args_map.pop('remind')
         base_logger.internal('creating new tasks ... waiting for response from manager')
         response = await manager.new_task(**args_map)
 
@@ -96,7 +98,7 @@ async def update(ctx, **kwargs):
     base_logger.internal('loading task manager')
     manager = ctx.obj['task_manager']
     base_logger.internal('updating args map')
-    args_map = kwargs
+    args_map = {key: val for key, val in kwargs.items() if val if not None}
 
     try:
         base_logger.internal('getting client confirmation for update')

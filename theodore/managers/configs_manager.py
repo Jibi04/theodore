@@ -7,12 +7,7 @@ class Configs_manager:
         try:
             with DB_tasks(Configs_table) as configs_manager:
                 category = data.get('category')
-                feature = await configs_manager.exists(category=category)
-
-                if feature:
-                    await configs_manager.update_features(data, and_conditions={'category': category})
-                else:
-                    await configs_manager.insert_features([data])
+                await configs_manager.upsert_features(data, primary_key={'category': category})
                 return send_message(True, message='done')
         except Exception as e:
             raise

@@ -1,26 +1,25 @@
-import asyncio
 from contextlib import asynccontextmanager
-from sqlalchemy import MetaData, inspect
+from sqlalchemy import MetaData, Table
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+import os
 from pathlib import Path
-from theodore.core.utils import base_logger
+from dotenv import find_dotenv, load_dotenv
 
+ENV_PATH = find_dotenv()
+load_dotenv(ENV_PATH)
 
 def create_engine():
-    from theodore.core.utils import DATA_DIR
-
-    DB_DIR = DATA_DIR
-    DB_DIR.mkdir(parents=True, exist_ok=True)
-    DB_PATH = DB_DIR / "theodore.sqlite"
-
+    db_name = os.getenv('DB_NAME')
+    BASE_DIR = Path(__file__).parent.parent.resolve()
+    DB_PATH = BASE_DIR / 'data' / db_name
 
     DB = f"sqlite+aiosqlite:///{DB_PATH}"
     # engine = create_async_engine(DB, echo=True) 
 
     engine = create_async_engine(DB, echo=False)
-    return engine
+    return engine, DB
 
-engine = create_engine()
+engine, DB = create_engine()
 LOCAL_SESSION = async_sessionmaker(bind=engine)
 meta = MetaData()
 
@@ -37,31 +36,13 @@ async def get_async_session():
         await session.close()
         pass
 
-async def create_tables():
-    base_logger.internal('Connecting to the database engine')
+
+async def drop_table(table: Table):
     async with engine.begin() as conn:
-        base_logger.internal('Creating all db tables')
+        await conn.run_sync(lambda sync_conn: table.drop(sync_conn))
+    print(f'{table.name} table dropped')
+
+
+async def create_tables():
+    async with engine.begin() as conn:
         await conn.run_sync(meta.create_all)
-
-
-
-# ------------------------
-# pseudo setup
-# ------------------------
-
-# async def count_tables():
-#     async with engine.connect() as conn:
-#         def get_tables(sync_conn):
-#             inspector = inspect(sync_conn)
-#             return inspector.get_table_names()
-        
-#         tables = await conn.run_sync(get_tables)
-#         return len(tables), tables
-
-    
-# async def main():
-#     count, tables = await count_tables()
-#     print(f"{count} tables found:", tables)
-
-
-# asyncio.run(main())

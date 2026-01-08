@@ -1,32 +1,37 @@
 import fake_user_agent
-import httpx, time, os, asyncio
-
-from dotenv import load_dotenv
-from datetime import datetime
+import httpx, time, os
+from dotenv import load_dotenv, find_dotenv
+from datetime import datetime, timedelta
 from rich.table import Table
 from theodore.core.theme import console
 from theodore.core.logger_setup import base_logger
-from theodore.core.utils import send_message, DATA_DIR, user_error, DB_tasks
-from theodore.models.base import engine
+from theodore.core.utils import send_message, DATA_DIR, user_error, DB_tasks, local_tz, Current_, Alerts_, Forecast_, WeatherModel
+from theodore.models.base import get_async_session
 from theodore.models.configs import Configs_table
 from theodore.models.weather import Current, Alerts, Forecasts
+from sqlalchemy import select, or_
 from theodore.managers.configs_manager import Configs_manager
-from theodore.managers.cache_manager import Cache_manager
 from httpx import ConnectTimeout, ReadTimeout, ReadError, DecodingError
+from typing import Type, TypeVar, Dict
 
+DOTENV_PATH = find_dotenv()
+load_dotenv(DOTENV_PATH)
 
-load_dotenv()
 configs = Configs_manager()
 ua = fake_user_agent.user_agent()
 manager = Configs_manager()
 
-
 CACHE_DIR = DATA_DIR / "cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
+T = TypeVar('T', bound=WeatherModel)
 
 FILE_PATH = CACHE_DIR / 'dummy.cache'
 
 class Weather_manager:
+
+    def validate_data(self, schema: Type[T], raw_data: dict, extra_context: dict):
+        return schema(**raw_data, **extra_context).model_dump()
+
     async def make_request(self, query, location: str = None, retries: int =3, clear_cache = False):
         """Make weather request from the weather API 
 
@@ -37,34 +42,41 @@ class Weather_manager:
 
         """
         base_logger.internal('Attempting weather request')
+        weather_map = {
+            'forecast': select(Forecasts),
+            'current': select(Current),
+            'alerts': select(Alerts)
+        }
+
+        async with get_async_session() as session:
+            NOW = datetime.now(tz=local_tz)
+            table = weather_map[query]
+            stmt = (table
+                    .where(or_(table.c.city == location, table.c.country == location))
+                    .where(table.c.time_requested >= NOW - timedelta(minutes=30))
+                    .order_by(table.c.time_requested.desc())
+                    .limit(1)
+                    )
+            result = await session.execute(stmt)
+            cache = result.mappings().first()
+
+        if cache is not None:
+            return send_message(True, data=cache)
+
         with DB_tasks(Configs_table) as config_manager:
             defaults = await config_manager.get_features({'category': 'weather'}, first=True)
+
         if location is None:
             location = defaults.default_location
             if not location:
                     user_error.error("Unable to fetch no location to query weather data from.")
                     return send_message(False, message='no location')
-            
-        base_logger.debug(f'Location loaded - {location}')
-
-        ttl = 60 * 30
-        cache = Cache_manager(ttl)
-
-        if clear_cache:
-            cache.clear_cache()
-
-
-        cache_key = f"{location}:{query}"
-        data = cache.get_cache(cache_key)
-        if data:
-            base_logger.debug(f'Cache found for {location} data - {data}')
-            return send_message(True, data=data, message='this is cache')
-
-        base_logger.internal(f'\'{cache_key}\' data expired or not in cache. cache-response \'{data}\'')
+        data = {}
+        
         with console.status(f'Fetching weather data for {location.capitalize()}', spinner='arc'):
             for attempt in range(retries + 1):
                 try:
-                    API_KEY  = os.getenv('weather_api_key') or defaults.api_key
+                    API_KEY  = os.getenv('WEATHER_API_KEY') or defaults.api_key
                     if not API_KEY:
                         base_logger.internal("[!] Missing environment variable: 'weather_api_key' aborting")
                         return send_message(False, message="Missing environment variable: 'weather_api_key'")
@@ -82,7 +94,6 @@ class Weather_manager:
                         base_logger.internal('awaiting response from client')
                         response = await client.get(url=url, params=params, headers=headers)
                         response.raise_for_status() 
-                        data = response.json()
                         base_logger.debug(f'weather data jsonified {data}')
                 except (ConnectTimeout, ReadTimeout, ReadError,) as e:
                     if attempt == retries:
@@ -95,7 +106,7 @@ class Weather_manager:
                         base_logger.debug(f"Recieved non json-Response from Serve. {str(e)}")
                         return send_message(False, message=f"Recieved non json-Response from server {response.status_code}")
                 except Exception as e:
-                    base_logger.internal(f'{type(e).__name__} error. Aborting...')
+                    user_error(f'{type(e).__name__} error. Aborting...')
                     return send_message(False, message=f'A  error occurred')
                 
             if not data:
@@ -114,20 +125,34 @@ class Weather_manager:
                 else:
                     final_message = f"{error_code} - {error_message}"
                 return send_message(False, message=f"[red bold][!] An API error occurred:[/red bold] {final_message}")
-        
-            base_logger.debug(f'creating new cache-object {cache_key} value {data}')
 
-            coroutines =[]
-            if 'current' in data: coroutines.append(cache.create_new_cache(self.to_dict(data, current=True), current=True))
-            if 'forecast' in data: coroutines.append(cache.create_new_cache(self.to_dict(data, forecast=True), forecasts=True))
-            if query == 'alerts': coroutines.append(cache.create_new_cache(self.to_dict(data, alerts=True), alerts=True))
+            registry = {
+                'current': {'table': Current, 'schema': Current_, 'path': ['current']},
+                'forecast': {'table': Forecasts, 'schema': Forecast_, 'path': ['forecast', 'forecastday', 0, {'split': ['day', 'astro']}]},
+                'alerts': {'table': Alerts, 'schema': Alerts_, 'path': ['alerts', 'alert']}
+            }
+
+            reg = registry[query]
+            nested_data = data
+            extra_context = {}
+
+            for key in reg['path']:
+                if key == 'split':
+                    extra_context = nested_data.get('astro')
+                    nested_data = nested_data.get('day')
+                if key.isdigit():
+                    nested_data = nested_data[key]
+                nested_data = nested_data.get(key, {})
+
+            extra_context.update(data.get('location', {}))
+            table = reg['table']
+            data_dict = self.validate_data(reg['schema'], raw_data=nested_data, extra_context=extra_context)
             
-            await asyncio.gather(*coroutines)
-            return send_message(True, data=data)
+            await DB_tasks(table).upsert_features(values=data_dict)
+            return send_message(True, data=data_dict)
         
 
     def get_current_weather_table(self, data, temp = None, speed= None):
-
         """Table designed to show beautiful display weather condition summary"""
 
         current = data.get("current", {})
@@ -239,63 +264,3 @@ class Weather_manager:
 
         return table
     
-    def to_dict(self, data, alerts=False, current=False, forecast=False):
-        location = data.get('location', {})
-        if alerts:
-            alert = data.get('alerts').get('alert')
-            return {
-            "headline" : alert.get('headline'),
-            "event" : alert.get('event'),
-            "certainty" : alert.get('certainty'),
-            "urgency" : alert.get('urgency'),
-            "severity" : alert.get('severity'),
-            "note" : alert.get('note'),
-            "desc" : alert.get('desc'),
-            "instruction" : alert.get('instruction'),
-            "city": location.get('name'),
-            "country": location.get('country'),
-        }
-        
-        if forecast:
-            forecast = data.get('forecast', {}).get('forecastday', [])[0]
-            day = forecast.get('day', {})
-            astro = forecast.get('astro', {})
-            return {
-                    "sunrise": astro.get('sunrise'),
-                    "sunset": astro.get('sunset'),
-                    "moonrise": astro.get('moonrise'),
-                    "moonset": astro.get('moonset'),
-                    "min_temp_c": day.get('mintemp_c', {}),
-                    "max_temp_c": day.get('maxtemp_c', {}),
-                    "avg_temp_c": day.get('avgtemp_c', {}),
-                    "min_temp_f": day.get('mintemp_f', {}),
-                    "max_temp_f": day.get('maxtemp_f', {}),
-                    "avg_temp_f": day.get('avgtemp_f', {}),
-                    "maxwind_kph":day.get('maxwind_kph', {}),
-                    "avgvis_km": day.get('avgvis_km', {}),
-                    "maxwind_mph": day.get('maxwind_mph', {}),
-                    "avgvis_miles": day.get('avgvis_mph', {}),
-                    "daily_chance_of_rain": day.get('daily_chance_of_rain', {}),
-                    "daily_chance_of_snow": day.get('daily_chance_of_snow', {}),
-                    "daily_will_it_rain": day.get('daily_will_it_rain', {}),
-                    "daily_will_it_snow": day.get('daily_will_it_snow', {}),
-                    "city": location.get('name'),
-                    "country": location.get('country'),
-            }
-        
-        if current:
-            current = data.get("current", {})
-            return {
-                        "text": current.get('condition').get('text'),
-                        "temp_c": current.get('temp_c'),
-                        "feels_c": current.get('feels_c'),
-                        "temp_f": current.get('temp_f'),
-                        "feels_f": current.get('feels_f'),
-                        "humidity": current.get('humidity'),
-                        "wind_kph": current.get('wind_kph'),
-                        "wind_mph": current.get('wind_mph'),
-                        "wind_dir": current.get('wind_dir'),
-                        "city": location.get('name'),
-                        "country": location.get('country'),
-            }
-            
