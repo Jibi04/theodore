@@ -1,38 +1,20 @@
-import rich_click as click
 import asyncio
+import json
+import rich_click as click
 from theodore.models.downloads import file_downloader
 from theodore.managers.download_manager import Downloads_manager
+from theodore.managers.daemon_manager import Worker
 from theodore.core.utils import user_success, Downloads, user_error, user_info, DB_tasks
 from theodore.cli.async_click import AsyncCommand
 from pathlib import Path
 
 downloader = Downloads(file_downloader)
 manager = Downloads_manager()
+worker = Worker()
 
 # ------------------------------------------
 #             Main Downloads CLI 
 # ------------------------------------------
-
-async def send_command(filename, filepath, cmd):
-    socket_path = manager.socket_path
-
-    try:
-        reader, writer = await asyncio.open_unix_connection(socket_path)
-
-        message = f'{cmd.upper()}:{filename}:{filepath}'
-        writer.write(message.encode())
-        await writer.drain()
-
-        response = await reader.read(1024)
-        user_info(f'server response: {response.decode()}')
-
-        writer.close()
-        await writer.wait_closed()
-    except FileNotFoundError:
-        user_error('Downloader isn\'t running (socket not found)')
-    except Exception as e:
-        user_error('Error communicating with downloader.')
-    return
 
 @click.group()
 @click.option('--dir_path', '-p', default="~/Downloads", type=str, help='directory to save file in')
@@ -45,20 +27,21 @@ def downloads(ctx: click.Context, dir_path: str) -> None:
 @downloads.command(cls=AsyncCommand)
 @click.option('--url', '-u', type=str, help='comma separated urls')
 @click.option('--resume', is_flag=True, help='Resume specific file download')
+@click.option('--dir_path', '-p', default="~/Downloads", type=str, help='directory to save file in')
 @click.pass_context
-async def file(ctx: click.Context, url: str, resume: bool) -> None:
+async def file(ctx: click.Context, url: str, resume: bool, dir_path: Path) -> None:
     """Download, Manage and track downloads"""
-    dir_path: Path = ctx.obj['dir_path']
     urls_to_download = []
 
     resumable_downloads = await downloader.get_undownloaded_urls()
-    urls_to_download.extend(list(map(downloader.parse_url, resumable_downloads)))
+    urls_to_download.extend([downloader.parse_url(url, dir_path) for url in resumable_downloads])
     if url:
         urls = [u.strip() for u in url.split(',') if u.strip()]
         if not urls:
             user_error("No valid URLs provided.")
             return
-        urls_to_download.extend(list(map(downloader.parse_url, urls)))
+        urls_to_download.extend([downloader.parse_url(url, dir_path) for url in urls])
+
     if not url and not resume:
         user_info('No URLs provided and --resume not set.')
         return
@@ -66,7 +49,6 @@ async def file(ctx: click.Context, url: str, resume: bool) -> None:
     if not urls_to_download and resume:
         user_info('No unfinished downloads to resume.')
         return
-    server = await manager.start_server()
     response = "Before start"
     try:
         
@@ -77,25 +59,14 @@ async def file(ctx: click.Context, url: str, resume: bool) -> None:
         # -------------------------------------------------------------
         # 3. Queue Tasks and Database Insertion
         # -------------------------------------------------------------
-        tasks = []
-        # Create the download tasks (must happen AFTER preparing db_tasks list)
-        for url_map in urls_to_download:
-            url = url_map.get('url')
-            url_path_name = url_map.get('filename')
-            full_path = url_map.get('filepath', dir_path / url_path_name)
-            # FIX 3: Ensure Download_manager.download_movie is awaited in the final gather
-            tasks.append(manager.download_movie(url, full_path, url_path_name))
-        if tasks:
-            user_success(f'Starting {len(tasks)} download(s)...')
-            response = await asyncio.gather(*tasks, return_exceptions=True)
+        mail_data = {"cmd": "DOWNLOAD"}
+        mail_data["file_args"] = urls_to_download
+
+        json_str: str = json.encoder.JSONEncoder().encode(mail_data)
+        response = await worker.send_signal(message=json_str.encode())
+        user_info(response)
     finally:
-        server.close()
-        await server.wait_closed()
-        socket_file = Path(manager.socket_path)
-        if socket_file.exists():
-            socket_file.unlink()
-    print("this is file response", response)
-    return
+        pass
 
 @downloads.command(cls=AsyncCommand)
 @click.argument('filename', type=str)
@@ -104,43 +75,49 @@ async def cancel(ctx: click.Context, filename: str):
     """Cancel file download"""
 
     _filename = await downloader.get_full_name(filename)
-    if not file:
-        click.echo(f'Error: No record found for file matching "{filename}".')
-        return
-    with DB_tasks(file_downloader) as db_manager:
-        file_obj = await db_manager.get_features(and_conditions={'filename': file}, first=True)
-        if file_obj:
-            filepath = file_obj.filepath
-        else:
-            click.echo(f'Error: No record found for file matching "{filename}".')
-            return
-    await send_command(_filename, filepath, cmd='CANCEL')
-    click.echo(f'{filename} download Cancelled. Cleanup will occur automatically.')
-
-
-@downloads.command(cls=AsyncCommand)
-@click.argument('filename')
-@click.pass_context
-async def pause(ctx, filename):
-    """Pause File download"""
-    _filename = await downloader.get_full_name(filename)
-    if not file:
+    if not filename:
         click.echo(f'Error: No record found for file matching "{filename}".')
         return
     with DB_tasks(file_downloader) as db_manager:
         file_obj = await db_manager.get_features(and_conditions={'filename': _filename}, first=True)
-        if file_obj:
-            filepath = file_obj.filepath
-        else:
+        if not file_obj:
             click.echo(f'Error: No record found for file matching "{filename}".')
             return
-    await send_command(_filename, filepath, cmd='PAUSE')
-    click.echo(f'{filename} download Paused.')
+        mail_data = {
+            "cmd": "CANCEL",
+            "file_args": [{"filename": _filename, "filepath": file_obj.filepath}]
+            }
+        
+        mail_data: str = json.encoder.JSONEncoder().encode(mail_data)
+        await worker.send_signal(mail_data.encode())
+
 
 @downloads.command(cls=AsyncCommand)
 @click.argument('filename')
 @click.pass_context
-async def resume(ctx, filename):
+async def pause(ctx: click.Context, filename: str):
+    """Pause File download"""
+    _filename = await downloader.get_full_name(filename)
+    if not filename:
+        click.echo(f'Error: No record found for file matching "{filename}".')
+        return
+    with DB_tasks(file_downloader) as db_manager:
+        file_obj = await db_manager.get_features(and_conditions={'filename': _filename}, first=True)
+        if not file_obj:
+            click.echo(f'Error: No record found for file matching "{filename}".')
+            return
+        mail_data = {
+            "cmd": "PAUSE",
+            "file_args": [{"filename": _filename, "filepath": file_obj.filepath}]
+            }
+        
+        mail_data: str = json.encoder.JSONEncoder().encode(mail_data)
+        await worker.send_signal(mail_data.encode())
+
+@downloads.command(cls=AsyncCommand)
+@click.argument('filename')
+@click.pass_context
+async def resume(ctx: click.Context, filename: str):
     """Resume Paused downloads"""
     _filename = await downloader.get_full_name(filename)
     if not file:
@@ -148,13 +125,16 @@ async def resume(ctx, filename):
         return
     with DB_tasks(file_downloader) as db_manager:
         file_obj = await db_manager.get_features(and_conditions={'filename': _filename}, first=True)
-        if file_obj:
-            filepath = file_obj.filepath
-        else:
-            click.echo(f'Error: No record found for file matching \'{filename}\'.')
+        if not file_obj:
+            click.echo(f'Error: No record found for file matching "{filename}".')
             return
-    await send_command(_filename, filepath, cmd='RESUME')
-    click.echo(f'{filename} download Resumed.')
+        mail_data = {
+            "cmd": "RESUME",
+            "file_args": [{"filename": _filename, "filepath": file_obj.filepath}]
+            }
+        
+        mail_data: str = json.encoder.JSONEncoder().encode(mail_data)
+        await worker.send_signal(mail_data.encode())
 
 
 @downloads.command(cls=AsyncCommand)

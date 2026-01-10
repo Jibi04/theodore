@@ -71,6 +71,8 @@ class Task_manager():
     async def delete_task(self, all: bool = False, title: str = None, task_id: int = None, ids: list = None) -> dict:
         base_logger.internal('Validating client arugments')
         task_ids = normalize_ids(task_id, ids)
+        if not task_ids:
+            return send_message(False, messgage="unknown delete operation. no valid task id's given.")
         try:
             base_logger.internal('Starting connection with database')
             async with get_async_session() as conn:

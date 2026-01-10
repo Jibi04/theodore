@@ -16,7 +16,7 @@ db_manager = DB_tasks(file_downloader)
 
 class Downloads_manager:
 
-    def __init__(self, path='/tmp/theodore.sock'):
+    def __init__(self, path='/tmp/theodore_downloads.sock'):
         self.active_events = {}
         self.socket_path = path
         self.cancel_flags = {}
@@ -211,10 +211,8 @@ class Downloads_manager:
                         elif status_code == 302:
                             user_error('URL moved to another Location, Check updated URL and try again.')
                             await self.stop_download(filename=filename, filepath=filepath)
-                            print('stop came back')
-                            print('calling delete')
                             await db_manager.delete_features(and_conditions={'filepath': str(filepath)})
-                            print('delete came back')
+                            user_info('Defunct file removed')
                             return
                         elif status_code == 416:
                             if filepath.exists() and filepath.stat().st_size == total_size: # Assuming total_size was set previously or correctly inferred

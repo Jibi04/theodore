@@ -213,10 +213,10 @@ class DB_tasks:
                 await session.rollback()
                 raise
 
-    async def upsert_features(self, values: Dict, primary_key: Dict = None) -> Dict:
+    async def upsert_features(self, values: Dict, primary_key: Dict = None, bulk: bool=False) -> Dict:
         async with get_async_session() as session:
             try:
-                if not isinstance(values, dict):
+                if not isinstance(values, (dict, list)):
                     raise TypeError(f'Expected \'{dict.__name__}\' but got \'{type(values)}\'.')
                 stmt = insert(self.table).values(values)
                 await session.execute(stmt)
@@ -283,7 +283,7 @@ class Downloads:
     def __init__(self, table: sql_table):
         self.file_downloader = table
 
-    def parse_url(self, url: str, full_path: Path=None) -> dict:
+    def parse_url(self, url: str, full_path: Path) -> dict:
         """
         Parses urls using unqote and urlparse
         return url filename
@@ -293,7 +293,7 @@ class Downloads:
         url_name = Path(unquote(urlparse(url).path)).name
         return_map['url'] = url
         return_map['filename'] = url_name
-        if full_path: return_map['filepath'] = full_path / url_name
+        return_map['filepath'] = f"{full_path}/{url_name}"
         
         return return_map
 
@@ -340,7 +340,7 @@ class Downloads:
         """
         try:
             with DB_tasks(table) as db_manager:
-                await db_manager.insert_features(values=values)
+                await db_manager.upsert_features(values=values)
         except SQLAlchemyError:
             raise
         

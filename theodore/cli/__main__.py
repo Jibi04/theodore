@@ -1,18 +1,20 @@
 import click
 import rich_click as click
 
-from theodore.cli.file_cli import file_manager
-from theodore.core.theme import cli_defaults
-from theodore.core.logger_setup import base_logger
 from theodore.cli.config_cli import config
+from theodore.cli.file_cli import file_manager
 from theodore.cli.tasks_cli import task_manager
 from theodore.cli.weather_cli import weather
 from theodore.cli.download_cli import downloads
+from theodore.cli.server_cli import servers
+from theodore.core.theme import cli_defaults
+from theodore.core.logger_setup import base_logger
 from theodore.tests.tasks_test import tasks_test
+from theodore.managers.daemon_manager import Worker
+from theodore.managers.configs_manager import Configs_manager
 from theodore.managers.file_manager import File_manager
 from theodore.managers.download_manager import Downloads_manager
 from theodore.managers.tasks_manager import Task_manager
-from theodore.managers.configs_manager import Configs_manager
 from theodore.managers.weather_manager import Weather_manager
 
 
@@ -24,10 +26,11 @@ cli_defaults()
 @click.version_option("0.1.0", prog_name="Theodore")
 @click.option("--verbose", '-v', is_flag=True, help="Enable verbose output")
 @click.pass_context
-def theodore(ctx, verbose):
+def theodore(ctx: click.Context, verbose):
     """🤖 Theodore — your personal CLI Assistant"""
 
     ctx.ensure_object(dict)
+    ctx.obj['worker'] = Worker()
     ctx.obj["verbose"] = verbose
     ctx.obj['task_manager'] = Task_manager()
     ctx.obj['config_manager'] = Configs_manager()
@@ -48,6 +51,7 @@ tests.add_command(tasks_test, name="tasks")
 task_manager.add_command(file_manager, name='file-manager')
 
 theodore.add_command(file_manager, name="file-manager")
+theodore.add_command(servers, name='servers')
 theodore.add_command(tests, name="tests")
 theodore.add_command(task_manager, name="tasks")
 theodore.add_command(weather, name='weather')
