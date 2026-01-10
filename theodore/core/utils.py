@@ -191,7 +191,7 @@ class DB_tasks:
                 data = ''
             return send_message(True, data=data)
 
-    async def get_features(self, and_conditions: dict = None, or_conditions: dict = None, first=False) -> list[tuple]:
+    async def get_features(self, and_conditions: dict = None, or_conditions: dict = None, first = False) -> list[tuple]:
         """Queries your DB Using SELECT with conditions as WHERE if conditions are None, returns all rows in the DB"""
         if not isinstance(self.table, sql_table):
             raise TypeError(f"Expected a Table class got {type(self.table)}.")
@@ -283,7 +283,7 @@ class Downloads:
     def __init__(self, table: sql_table):
         self.file_downloader = table
 
-    def parse_url(self, url: str, full_path: Path) -> dict:
+    def parse_url(self, url: str, full_path: Path = "~/Downloads/") -> dict:
         """
         Parses urls using unqote and urlparse
         return url filename

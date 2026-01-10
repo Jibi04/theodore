@@ -85,7 +85,6 @@ class Worker:
 
 
         self.registry = {
-            "DOWNLOAD": self.handle_downloads,
             "PAUSE": self.handle_pause,
             "RESUME": self.handle_resume,
             "CANCEL": self.handle_cancel,
@@ -149,7 +148,6 @@ class Worker:
         try:
             message: dict = message.decode()
             json_obj = json.decoder.JSONDecoder().decode(message)
-            # json_obj = json.loads(json_str)
 
             cmd = json_obj.get("cmd")
 
@@ -168,7 +166,8 @@ class Worker:
                 case "DOWNLOAD":
                     urls_to_download = json_obj.get('file_args')
                     for url_map in urls_to_download:
-                        await self.handle_downloads(**url_map)
+                        async with self._workers:
+                            await self.downloads_instance.download_movie(**url_map)
                 case _:
                     file_args = json_obj.get('file_args')
                     for args_map in file_args:
