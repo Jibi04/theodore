@@ -4,18 +4,18 @@ import psutil
 from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 from theodore.core.utils import user_info, user_error
-from theodore.managers.download_manager import Downloads_manager
+from theodore.managers.download_manager import DownloadManager
 
 
-class Validate_Signal(BaseModel):
+class ValidateSignal(BaseModel):
     message: str
 
 
-class Validate_File_Args(BaseModel):
+class ValidateFileArgs(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     filename: str
     filepath: str | Path | None
-    downloads_instance: Downloads_manager
+    downloads_instance: DownloadManager
 
 
 class Signal:
@@ -43,7 +43,7 @@ class Signal:
             raise
 
 
-class System_Monitor:
+class SystemMonitor:
     def __init__(self, interval: float = 5.0, cpu_threshold: float = 25.0):
         self.interval = interval
         self.cpu_threshold = cpu_threshold
@@ -75,18 +75,18 @@ class System_Monitor:
 class Worker:
 
     def __init__(self, workers = 4):
-        self.downloads_instance: Downloads_manager = Downloads_manager()
+        self.downloads_instance: DownloadManager = DownloadManager()
         self.signal_instance: Signal = Signal()
         self.server: asyncio.AbstractServer = None
         self.server_socket: str = "theodore.sock"
-        self.system_monitor: System_Monitor = System_Monitor()
+        self.system_monitor: SystemMonitor = SystemMonitor()
         self._workers = asyncio.Semaphore(workers)
 
 
 
         self.registry = {
-            "DOWNLOAD": self.handle_downloads,
             "PAUSE": self.handle_pause,
+            "DOWNLOAD": self.downloads_instance.download_movie,
             "RESUME": self.handle_resume,
             "CANCEL": self.handle_cancel,
             "SHUTDOWN": self.stop_processes
@@ -149,7 +149,6 @@ class Worker:
         try:
             message: dict = message.decode()
             json_obj = json.decoder.JSONDecoder().decode(message)
-            # json_obj = json.loads(json_str)
 
             cmd = json_obj.get("cmd")
 
@@ -160,17 +159,18 @@ class Worker:
             
             print(f"starting {cmd} process...")
             func = self.registry.get(cmd)
+            file_args = json_obj.get("file_args")
+
             match cmd:
                 case "SHUTDOWN":
                     await func()
                     writer.write(f"{cmd} Processed.".encode())
                     await writer.drain()
                 case "DOWNLOAD":
-                    urls_to_download = json_obj.get('file_args')
-                    for url_map in urls_to_download:
-                        await self.handle_downloads(**url_map)
+                    for url_map in file_args:
+                        async with self._workers:
+                            await func(**url_map)
                 case _:
-                    file_args = json_obj.get('file_args')
                     for args_map in file_args:
                         await func(**args_map)
                     writer.write(f"{cmd} processed.".encode())
@@ -188,10 +188,9 @@ class Worker:
     async def send_signal(self, message: str):
         if not Path(self.server_socket).exists():
             return f"Cannot Send signal, Server not running {self}"
-        
         reader, writer = await asyncio.open_unix_connection(self.server_socket)
         try:
-            msg_obj = Validate_Signal(message=message)
+            msg_obj = ValidateSignal(message=message)
 
 
             message = msg_obj.message.encode()
@@ -199,6 +198,7 @@ class Worker:
             await writer.drain()
 
             response = await reader.read(1024)
+            print(response)
             return response.decode()
         except Exception:
             raise
@@ -252,9 +252,9 @@ class Worker:
             await self.downloads_instance.stop_download(filename=_filename, filepath=file_obj.filepath)
             user_info(f"{_filename} Cancelled")
 
-    def validate_file_args(self, filename: str, filepath: Path | str, downloads_instance: Downloads_manager):
+    def validate_file_args(self, filename: str, filepath: Path | str, downloads_instance: DownloadManager):
         try:
-            file_obj = Validate_File_Args(filename=filename, filepath=filepath, downloads_instance=downloads_instance)
+            file_obj = ValidateFileArgs(filename=filename, filepath=filepath, downloads_instance=downloads_instance)
             return file_obj
         except Exception:
             raise

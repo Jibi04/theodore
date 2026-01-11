@@ -11,7 +11,7 @@ from theodore.core.utils import user_success, user_error, JSON_DIR, TEMP_DIR, lo
 from rich.table import Table
 from theodore.core.theme import console
 from theodore.core.logger_setup import base_logger
-from theodore.core.transporter import Communication_Channel
+from theodore.core.transporter import CommunicationChannel
 
 HOME = Path.home()
 Downloads = HOME / "Downloads"
@@ -20,7 +20,7 @@ Documents = HOME / "Documents"
 
 LOG_FILE = JSON_DIR /  "file_manager_logs.json"
 
-channel = Communication_Channel()
+channel = CommunicationChannel()
 
 target_dirs = {
     'peaky-blinders': HOME / Videos / 'Peaky Blinders' / "S3" 
@@ -41,7 +41,7 @@ EXTENSION_MAP = {
 
 pattern = ['*.mkv', '*.mp4', '*.deb', '*.sh', '*.pdf', '*.docx', '*.tar', '*.zip', '*.csv', '*.xlsx', '*.srt', '*.html'] 
 
-class File_manager:
+class FileManager:
     def get_location_content_with_match(self, item_name: str, dir_location: Path | str, recursive) -> list[PosixPath]:
         """Search for file/dir in location"""
         locations = []

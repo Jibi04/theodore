@@ -1,11 +1,11 @@
 from sqlalchemy.exc import SQLAlchemyError
-from theodore.models.configs import Configs_table
-from theodore.core.utils import user_error, send_message, DB_tasks, get_configs_table
+from theodore.models.configs import ConfigTable
+from theodore.core.utils import user_error, send_message, DBTasks, get_configs_table
 
-class Configs_manager:
+class ConfigManager:
     async def upsert_category(self, data: dict) -> dict:
         try:
-            with DB_tasks(Configs_table) as configs_manager:
+            with DBTasks(ConfigTable) as configs_manager:
                 category = data.get('category')
                 await configs_manager.upsert_features(data, primary_key={'category': category})
                 return send_message(True, message='done')
@@ -14,7 +14,7 @@ class Configs_manager:
     
     async def show_configs(self, args_map) -> dict:
         try:
-            with DB_tasks(Configs_table) as configs_manager:
+            with DBTasks(ConfigTable) as configs_manager:
                 for category, validation in args_map.items():
                     if validation:
                         if category == 'all':

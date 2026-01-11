@@ -4,7 +4,7 @@ from sqlalchemy import Table, Column, String
 import asyncio 
 
 
-Configs_table = Table(
+ConfigTable = Table(
     'configs',
     meta,
     Column('category', String, primary_key=True, nullable=False),

@@ -1,6 +1,6 @@
 import dateparser 
 import re, asyncio
-from typing import Dict, Annotated, Literal
+from typing import Dict, Annotated
 from rich.table import Table
 from sqlalchemy import Table as sql_table
 from pathlib import Path
@@ -128,7 +128,7 @@ from theodore.models.base import get_async_session
 from sqlalchemy import select, insert, update, delete, and_, or_, text
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 
-class DB_tasks:
+class DBTasks:
     """
     Write, update, delete, select rows and feartures from your db, Asynchronously
     """
@@ -191,7 +191,7 @@ class DB_tasks:
                 data = ''
             return send_message(True, data=data)
 
-    async def get_features(self, and_conditions: dict = None, or_conditions: dict = None, first=False) -> list[tuple]:
+    async def get_features(self, and_conditions: dict = None, or_conditions: dict = None, first = False) -> list[tuple]:
         """Queries your DB Using SELECT with conditions as WHERE if conditions are None, returns all rows in the DB"""
         if not isinstance(self.table, sql_table):
             raise TypeError(f"Expected a Table class got {type(self.table)}.")
@@ -266,7 +266,7 @@ class DB_tasks:
 
 
     def __repr__(self):
-        return f"DB_tasks(table={self.table.name})"
+        return f"DBTasks(table={self.table.name})"
     
     def __str__(self):
         return f"table name '{self.table.name}'"
@@ -283,7 +283,7 @@ class Downloads:
     def __init__(self, table: sql_table):
         self.file_downloader = table
 
-    def parse_url(self, url: str, full_path: Path) -> dict:
+    def parse_url(self, url: str, full_path: Path = "~/Downloads/") -> dict:
         """
         Parses urls using unqote and urlparse
         return url filename
@@ -339,7 +339,7 @@ class Downloads:
         returns None
         """
         try:
-            with DB_tasks(table) as db_manager:
+            with DBTasks(table) as db_manager:
                 await db_manager.upsert_features(values=values)
         except SQLAlchemyError:
             raise
@@ -348,7 +348,7 @@ class Downloads:
         async with get_async_session() as session:
             stmt = (select(self.file_downloader.c.filename)
                     .where(
-                        self.file_downloader.c.filename.ilike(f'{filename}%'),
+                        self.file_downloader.c.filename.ilike(f'%{filename}%'),
                         self.file_downloader.c.is_downloaded.is_(False)
                         )
                     .limit(1)
@@ -368,7 +368,7 @@ class WeatherModel(BaseModel):
     country: str
     time_requested: Annotated[datetime, Field(default_factory=partial(datetime.now, tz=local_tz))]
 
-class Current_(WeatherModel):
+class CurrentModel(WeatherModel):
     model_config = ConfigDict(extra='ignore')
 
     text: Annotated[str | None, Field(alias='text')]
@@ -381,7 +381,7 @@ class Current_(WeatherModel):
     wind_mph: Annotated[float, Field(alias='wind_mph')]
     wind_dir: Annotated[float, Field(alias='wind_dir')]
 
-class Alerts_(WeatherModel):
+class AlertsModel(WeatherModel):
     model_config = ConfigDict(extra='ignore')
 
     headline: Annotated[str | None, Field(alias='headline')]
@@ -395,7 +395,7 @@ class Alerts_(WeatherModel):
     instructions: Annotated[str | None, Field(alias='instructions')]
 
 
-class Forecast_(WeatherModel):
+class ForecastModel(WeatherModel):
     model_config = ConfigDict(extra='ignore')
 
     sunrise: Annotated[datetime, Field(alias='sunrise')]

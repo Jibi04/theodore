@@ -1,11 +1,10 @@
-import asyncio
 from sqlalchemy import Table, Column, String, Boolean, Integer, DateTime # , ForeignKey , insert, update, delete, select
 from theodore.models.base import meta , engine, create_tables
 from datetime import datetime, timezone
 from theodore.core.utils import base_logger, error_logger
 
 
-Tasks = Table(
+TasksTable = Table(
     'tasks',
     meta, 
     Column('task_id', Integer, primary_key=True, autoincrement=True),

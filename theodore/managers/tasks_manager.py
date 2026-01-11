@@ -1,17 +1,17 @@
-from theodore.core.utils import send_message, parse_date, base_logger, user_error, normalize_ids, DB_tasks
+from theodore.core.utils import send_message, parse_date, base_logger, user_error, normalize_ids, DBTasks
 from theodore.core.theme import cli_defaults, console
 from sqlalchemy import insert, update, delete, select
 from sqlalchemy.exc import SQLAlchemyError
 from theodore.models.base import get_async_session
 from datetime import datetime, timezone
-from theodore.models.tasks import Tasks
+from theodore.models.tasks import TasksTable
 
 
 cli_defaults()
 
-class Task_manager():
+class TaskManager():
     def __init__(self):
-        self.db_manager = DB_tasks(Tasks)
+        self.db_manager = DBTasks(TasksTable)
 
     async def new_task(self, **other_values) -> dict:
         try:
@@ -43,21 +43,21 @@ class Task_manager():
             base_logger.internal('Starting connection with database')
             async with get_async_session() as conn:
                 base_logger.internal('Getting task objects from db to be updated')
-                stmt = (update(Tasks)
+                stmt = (update(TasksTable)
                         .where(
-                            (Tasks.c.task_id == task_id)&
-                            (Tasks.c.is_deleted.is_(False))
+                            (TasksTable.c.task_id == task_id)&
+                            (TasksTable.c.is_deleted.is_(False))
                             )
                         .values(**update_values)
                         )
                 base_logger.internal('Updating task data in db')
-                response = await conn.execute(stmt.returning(Tasks.c.task_id, Tasks.c.title))
+                response = await conn.execute(stmt.returning(TasksTable.c.task_id, TasksTable.c.title))
                 rows = response.mappings().all()
                 if not rows:
                     base_logger.internal('Db returned a zero row count no matching record found')
                     return send_message(False, "No matching record found.")
                 base_logger.debug(f'tasks values {rows} updated')
-            return send_message(True, message='Tasks updated.')
+            return send_message(True, message='TasksTable updated.')
         except SQLAlchemyError as e:
             base_logger.internal('Database Error Aborting ...')
             user_error(f'SQLAlchemyError: {e}')
@@ -77,11 +77,11 @@ class Task_manager():
             base_logger.internal('Starting connection with database')
             async with get_async_session() as conn:
                 base_logger.internal('Preparing delete statement')
-                stmt = delete(Tasks).where(Tasks.c.is_deleted.is_(True))
+                stmt = delete(TasksTable).where(TasksTable.c.is_deleted.is_(True))
                 msg = 'Task(s) deleted'
                 if task_id or ids:
                     stmt = (stmt.where(
-                                (Tasks.c.task_id.in_(task_ids))
+                                (TasksTable.c.task_id.in_(task_ids))
                             ))
                     msg = f'deleted task(s) with ids: - {task_ids}'
                 base_logger.internal('Executing delete statement')
@@ -109,7 +109,7 @@ class Task_manager():
             base_logger.internal('Starting connection with database')
             async with get_async_session() as conn:
                 base_logger.internal('Preparing move to trash statement')
-                stmt = update(Tasks).where(Tasks.c.is_deleted.is_(False))
+                stmt = update(TasksTable).where(TasksTable.c.is_deleted.is_(False))
                 msg = f'Trashed all tasks'
                 if all:
                     stmt = (stmt.values(
@@ -118,7 +118,7 @@ class Task_manager():
                             )
                 elif title:
                     stmt = (stmt.where(
-                                Tasks.c.title.ilike(f'%{title}%')
+                                TasksTable.c.title.ilike(f'%{title}%')
                             ).values(
                                 is_deleted=True, 
                                 date_deleted=datetime.now(timezone.utc))
@@ -126,7 +126,7 @@ class Task_manager():
                     msg = f'Trashed Task with title {title}'
                 else:
                     stmt = (stmt.where(
-                                (Tasks.c.task_id.in_(task_ids))
+                                (TasksTable.c.task_id.in_(task_ids))
                             ).values(
                                 is_deleted=True, 
                                 date_deleted=datetime.now(timezone.utc))
@@ -156,7 +156,7 @@ class Task_manager():
             base_logger.internal('Starting connection with database')
             async with get_async_session() as conn:
                 base_logger.internal('Preparing restore statement')
-                stmt = update(Tasks).where(Tasks.c.is_deleted.is_(True))
+                stmt = update(TasksTable).where(TasksTable.c.is_deleted.is_(True))
                 if all:
                     stmt = (stmt
                             .values(
@@ -166,7 +166,7 @@ class Task_manager():
                             )
                 else:
                     stmt = (stmt.where(
-                                (Tasks.c.task_id.in_(task_ids))
+                                (TasksTable.c.task_id.in_(task_ids))
                             ).values(
                                 is_deleted=False, 
                                 date_deleted=datetime.now(timezone.utc)
@@ -194,10 +194,10 @@ class Task_manager():
         try:
             async with get_async_session() as conn:
                 base_logger.internal('Creating search statement')
-                stmt = (select(Tasks)
+                stmt = (select(TasksTable)
                         .where(
-                            (Tasks.c.title.ilike(f'%{keyword}%')) |
-                            (Tasks.c.description.ilike(f'%{keyword}%'))
+                            (TasksTable.c.title.ilike(f'%{keyword}%')) |
+                            (TasksTable.c.description.ilike(f'%{keyword}%'))
                             ))
                 base_logger.internal('Executing search statement')
                 result = await conn.execute(stmt)
@@ -228,22 +228,22 @@ class Task_manager():
                 base_logger.internal('Preparing list query')
                 base_logger.internal('Applying list filters')
                 if deleted:
-                    query = select(Tasks).where(Tasks.c.is_deleted.is_(True))
+                    query = select(TasksTable).where(TasksTable.c.is_deleted.is_(True))
                 else:
-                    query = select(Tasks).where(Tasks.c.is_deleted.is_(False))
-                if task_ids: query = query.where(Tasks.c.task_id.in_(task_ids))
+                    query = select(TasksTable).where(TasksTable.c.is_deleted.is_(False))
+                if task_ids: query = query.where(TasksTable.c.task_id.in_(task_ids))
                 if status in ("pending", "is_completed", "not_completed", "in_progress"):
-                    query = query.where(Tasks.c.status == status)
+                    query = query.where(TasksTable.c.status == status)
 
                 # Handle date filters
                 base_logger.internal('Applying date filters')
                 date_filters = {
-                    "created_before": (date_args.get('created_before'), Tasks.c.date_created, '<'),
-                    "created_after": (date_args.get('created_after'), Tasks.c.date_created, '>'),
-                    "created_on": (date_args.get('created_on'), Tasks.c.date_created, '=='),
-                    "due_before": (date_args.get('due_before'), Tasks.c.due, '<'),
-                    "due_after": (date_args.get('due_after'), Tasks.c.due, '>'),
-                    "due_on": (date_args.get('due_on'), Tasks.c.due, '==')
+                    "created_before": (date_args.get('created_before'), TasksTable.c.date_created, '<'),
+                    "created_after": (date_args.get('created_after'), TasksTable.c.date_created, '>'),
+                    "created_on": (date_args.get('created_on'), TasksTable.c.date_created, '=='),
+                    "due_before": (date_args.get('due_before'), TasksTable.c.due, '<'),
+                    "due_after": (date_args.get('due_after'), TasksTable.c.due, '>'),
+                    "due_on": (date_args.get('due_on'), TasksTable.c.due, '==')
                 }
                 for filter_name, (date_value, column, operator) in date_filters.items():
                     if date_value:

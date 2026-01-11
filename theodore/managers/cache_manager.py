@@ -4,10 +4,10 @@ from datetime import datetime
 
 
 from pathlib import Path
-from sqlalchemy import select, update, insert
+from sqlalchemy import select, insert
 from sqlalchemy.exc import SQLAlchemyError
 from theodore.models.base import get_async_session
-from theodore.models.other_models import File_logs
+from theodore.models.other_models import FileLogsTable
 from theodore.models.weather import Current, Alerts, Forecasts
 from theodore.core.utils import send_message, DATA_DIR, local_tz
 from theodore.core.logger_setup import base_logger
@@ -26,19 +26,19 @@ class Cache_manager:
         self.ttl = ttl
         self.cache = self._load_cache()
 
-    async def load_cache(self, current=False, alerts=False, forecasts=False, file_logs=False) -> Dict:
+    async def load_cache(self, current=False, alerts=False, forecasts=False, FileLogsTable=False) -> Dict:
         try:
             async with get_async_session() as conn:
                 if current: query = select(Current)
                 if alerts: query = select(Alerts)
                 if forecasts: query = select(Forecasts)
-                if file_logs: query = select(File_logs)
+                if FileLogsTable: query = select(FileLogsTable)
                 db_response = await conn.execute(query)
                 return send_message(True, data=db_response.mappings().all())
         except SQLAlchemyError as err:
             return send_message(False, message=f"unable to load cache {str(err)}")
 
-    async def create_new_cache(self, data= None, current=False, alerts=False, forecasts=False, file_logs=False, bulk_insert=False, *args) -> Dict:
+    async def create_new_cache(self, data= None, current=False, alerts=False, forecasts=False, FileLogsTable=False, bulk_insert=False, *args) -> Dict:
         try:
             async with get_async_session() as conn:
                 if bulk_insert:
@@ -52,14 +52,14 @@ class Cache_manager:
                     if current: query = insert(Current).values(**data)
                     if alerts: query = insert(Alerts).values(**data)
                     if forecasts: query = insert(Forecasts).values(**data)
-                    if file_logs: query = insert(File_logs).values(**data)
+                    if FileLogsTable: query = insert(FileLogsTable).values(**data)
                     db_response = await conn.execute(query)
                 conn.commit()
                 return send_message(True, data=db_response.rowcount)
         except SQLAlchemyError as err:
             return send_message(False, message=f"unable to load cache {str(err)}")
 
-    async def update_cache(self, data=None, current=False, alerts=False, forecasts=False, file_logs=False, bulk_update=False, *args) -> Dict:
+    async def update_cache(self, data=None, current=False, alerts=False, forecasts=False, FileLogsTable=False, bulk_update=False, *args) -> Dict:
         try:
             async with get_async_session() as conn:
                 if bulk_update:
@@ -73,7 +73,7 @@ class Cache_manager:
                     if current: query = insert(Current).values(**data)
                     if alerts: query = insert(Alerts).values(**data)
                     if forecasts: query = insert(Forecasts).values(**data)
-                    if file_logs: query = insert(File_logs).values(**data)
+                    if FileLogsTable: query = insert(FileLogsTable).values(**data)
                     db_response = await conn.execute(query)
                 conn.commit()
                 return send_message(True, data=db_response.rowcount)

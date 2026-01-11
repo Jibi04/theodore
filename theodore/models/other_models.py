@@ -1,8 +1,6 @@
-from theodore.models.base import create_tables, meta
-from theodore.core.utils import error_logger, base_logger, local_tz
+from theodore.models.base import meta
+from theodore.core.utils import local_tz
 from sqlalchemy import Table, Column, String, DateTime, Boolean
-from datetime import datetime
-import asyncio 
 
 Queues = Table(
     'queues',
@@ -14,7 +12,7 @@ Queues = Table(
     Column('date', DateTime(timezone=local_tz)),
 )
 
-File_logs = Table(
+FileLogsTable = Table(
     'file_logs',
     meta,
     Column('filename', String, primary_key=True, nullable=False),

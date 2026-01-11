@@ -3,7 +3,7 @@ import rich_click as click
 
 from theodore.cli.config_cli import config
 from theodore.cli.file_cli import file_manager
-from theodore.cli.tasks_cli import task_manager
+from theodore.cli.task_cli import task_manager
 from theodore.cli.weather_cli import weather
 from theodore.cli.download_cli import downloads
 from theodore.cli.server_cli import servers
@@ -11,11 +11,11 @@ from theodore.core.theme import cli_defaults
 from theodore.core.logger_setup import base_logger
 from theodore.tests.tasks_test import tasks_test
 from theodore.managers.daemon_manager import Worker
-from theodore.managers.configs_manager import Configs_manager
-from theodore.managers.file_manager import File_manager
-from theodore.managers.download_manager import Downloads_manager
-from theodore.managers.tasks_manager import Task_manager
-from theodore.managers.weather_manager import Weather_manager
+from theodore.managers.configs_manager import ConfigManager
+from theodore.managers.file_manager import FileManager
+from theodore.managers.download_manager import DownloadManager
+from theodore.managers.tasks_manager import TaskManager
+from theodore.managers.weather_manager import WeatherManager
 
 
 # ======= Theme Import instantiation ========
@@ -32,11 +32,11 @@ def theodore(ctx: click.Context, verbose):
     ctx.ensure_object(dict)
     ctx.obj['worker'] = Worker()
     ctx.obj["verbose"] = verbose
-    ctx.obj['task_manager'] = Task_manager()
-    ctx.obj['config_manager'] = Configs_manager()
-    ctx.obj['weather_manager'] = Weather_manager()
-    ctx.obj['download_manager'] = Downloads_manager()
-    ctx.obj['file_manager'] = File_manager()
+    ctx.obj['task_manager'] = TaskManager()
+    ctx.obj['config_manager'] = ConfigManager()
+    ctx.obj['weather_manager'] = WeatherManager()
+    ctx.obj['download_manager'] = DownloadManager()
+    ctx.obj['file_manager'] = FileManager()
 
     base_logger.internal("Theodore Initialized")
 

@@ -12,7 +12,7 @@ class InputRequest:
     response_queue: queue.Queue
     table: Any = None
 
-class Communication_Channel:
+class CommunicationChannel:
     def __init__(self):
         self.task_queue = queue.Queue()
         self._worker = threading.Thread(target=self._main_worker, daemon=True)

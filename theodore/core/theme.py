@@ -1,6 +1,5 @@
 from rich.console import Console
 from rich.theme import Theme
-import click 
 
 def cli_defaults():
     import rich_click as cl

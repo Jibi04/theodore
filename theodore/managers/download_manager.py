@@ -1,9 +1,9 @@
 import asyncio, aiofiles
 import httpx
 from theodore.core.logger_setup import base_logger
-from theodore.managers.configs_manager import Configs_manager
-from theodore.core.utils import user_success, user_error, user_info, local_tz, DB_tasks
-from theodore.models.downloads import file_downloader
+from theodore.managers.configs_manager import ConfigManager
+from theodore.core.utils import user_success, user_error, user_info, local_tz, DBTasks
+from theodore.models.downloads import DownloadTable
 from datetime import datetime
 from fake_user_agent import user_agent
 from pathlib import Path
@@ -11,59 +11,14 @@ from tqdm.asyncio import tqdm
 
 # --- Global Setup ---
 ua = user_agent()
-config_manager = Configs_manager()
-db_manager = DB_tasks(file_downloader)
+config_manager = ConfigManager()
+db_manager = DBTasks(DownloadTable)
 
-class Downloads_manager:
+class DownloadManager:
 
-    def __init__(self, path='/tmp/theodore_downloads.sock'):
+    def __init__(self):
         self.active_events = {}
-        self.socket_path = path
         self.cancel_flags = {}
-
-    async def handle_signal(self, reader, writer) -> None:
-        data = await reader.read(1024)
-        if not data:
-            return
-        
-        try:
-            message = data.decode()
-            cmd, filename, filepath = message.split(':')
-            if filename in self.active_events:
-                event = self.active_events[filename]
-                match cmd:
-                    case 'PAUSE':
-                        event.clear()
-                        message = 'OK'
-                    case 'RESUME':
-                        event.set()
-                        message = 'OK'
-                    case 'CANCEL':
-                        self.cancel_flags[filename] = True
-                        await self.stop_download(filepath=filepath, filename=filename)
-                        message = 'OK'
-                    case _:
-                        message = f"error - '{cmd}' not a valid command."
-            else:
-                message = f'Error - \'{filename}\' has no active event'
-            writer.write(message.encode())
-        except ValueError:
-            writer.write(b'error: Invalid format')
-        finally:
-            await writer.drain()
-            writer.close()
-            await writer.wait_closed()
-        
-    async def start_server(self):
-        path = Path(self.socket_path).expanduser()
-
-        if path.exists():
-            path.unlink()
-        
-        server = await asyncio.start_unix_server(self.handle_signal, path=self.socket_path)
-
-        asyncio.create_task(server.serve_forever())
-        return server
 
     async def stop_download(self, filepath, filename) -> None:
         """Removes the downloading marker."""
