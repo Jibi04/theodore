@@ -1,8 +1,0 @@
-{
-    "weather": {
-        "default_location": "london"
-    },
-    "downloads": {
-        "default_path": "~/Downloads"
-    }
-}

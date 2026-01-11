@@ -34,6 +34,10 @@ dist/
 Thumbs.db
 
 
+data/
+*.sqlite
+
+
 # json
 logs/*.json # Ignore all JSON files
 !configs.json # Except configs.json
