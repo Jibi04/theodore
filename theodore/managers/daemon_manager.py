@@ -1,17 +1,20 @@
 import asyncio
+import getpass
 import json
 import psutil
 import struct
 import time
 import threading
 import traceback
+from asyncio.exceptions import IncompleteReadError
 from datetime import datetime as dt, UTC
 from pathlib import Path
 from typing import Mapping, Any
-from asyncio.exceptions import IncompleteReadError
+from watchdog.observers import Observer
 from theodore.core.logger_setup import base_logger, error_logger
 from theodore.core.utils import user_info
 from theodore.managers.download_manager import DownloadManager
+from theodore.managers.file_handler import FileEventManager
 
 
 class Signal:
@@ -172,6 +175,35 @@ Task Name: {task_name}
 status: {status}
 Task response: {task_response}
                 """)
+        
+
+class FileEventHandler:
+    def __init__(self, observer_path: str, target_path):
+        if not Path(observer_path).expanduser().exists():
+            user_info(f"FileHandler: {observer_path} doesn't exist!")
+            return
+        
+        self._user = getpass.getuser()
+        self._watcher_shutdown_event = threading.Event()
+        self._observer_target = Path(observer_path).expanduser()
+        self._observer = Observer()
+        self._event = FileEventManager(user=self._user, target_folder=target_path)
+
+    def start(self):
+        user_info("Observer Running")
+
+        self._observer.schedule(event_handler=self._event, path=str(self._observer_target), recursive=True)
+        self._observer.start()
+
+        self._watcher_shutdown_event.wait()
+
+        self._observer.stop()
+        self._observer.join()
+
+        user_info("Observer Stopped")
+
+    def stop(self):
+        self._watcher_shutdown_event.set()
 
 
 class Worker:
@@ -180,9 +212,11 @@ class Worker:
         self.__dispatch = Dispatch()
         self.__monitor = SytemMonitor()
         self.__log_handler = LogsHandler()
+        self.__file_event_handler = FileEventHandler(observer_path="~/Downloads", target_path="Theodore_etl")
         self.__downloader = DownloadManager()
         self._worker_shutdown_event = asyncio.Event()
         self.__cmd_registry = {
+            "STOP-PROCESSES": {"basename": "STOP-PROCESSES", "func": self.start_processes},
             "RESUME": {"basename": "DownloadManager - Resume", "func": self.__downloader.resume},
             "STOP": {"basename": "DownloadManager - Stop", "func": self.__downloader.stop_download},
             "PAUSE": {"basename": "DownloadManager - Pause", "func": self.__downloader.pause},
@@ -201,6 +235,13 @@ class Worker:
             name="system-monitor"
         )
 
+        asyncio.create_task(
+            asyncio.to_thread(
+                self.__file_event_handler.start
+            ),
+            name="file-event-handler"
+        )
+
         self.signal_task = asyncio.create_task(
             self.__signal.start(),
             name="unix-server"
@@ -213,6 +254,7 @@ class Worker:
 
         await self.__dispatch.shutdown()
         self.__monitor.stop()
+        self.__file_event_handler.stop()
         self.__signal.stop()
 
         # Await server shutdown
@@ -265,14 +307,7 @@ class Worker:
                     return
                 
                 cmd = message.get("cmd", None)
-                args = message.get("file_args")
-                
-                # Kill-switch for all tasks
-                if cmd == "STOP-PROCESSES":
-                    await self.stop_processes()
-                    writer.write(b"Shutdown Initiated")
-                    await writer.drain()
-                    return 
+                args = message.get("file_args") 
                 
                 cmd_register = self.__cmd_registry.get(cmd, None)
                 if cmd_register is None:
@@ -280,7 +315,7 @@ class Worker:
                     await writer.drain()
                     return 
                 
-                self.process_cmd(cmd_register, args)
+                await self.process_cmd(cmd_register, args)
                 writer.write(f"Worker: {cmd} Initiated".encode())
                 await writer.drain()
         except asyncio.CancelledError:
@@ -357,12 +392,19 @@ class Worker:
     #             self._worker_shutdown_event.set,
     #         )
         
-    def process_cmd(self, cmd_dict: Mapping[str, str], func_kwargs):
-        basename = cmd_dict.get("basename")
-        func = cmd_dict.get("func")
+    async def process_cmd(self, cmd_dict: Mapping[str, str], func_kwargs):
 
+        # Kill-switch for all tasks
+        basename = cmd_dict.get("basename")
+
+        if basename == "STOP-PROCESSES":
+            await self.stop_processes()
+            return
+        
+        func = cmd_dict.get("func")
         if isinstance(func_kwargs, list):
             self.__dispatch.dispatch_many(basename=basename, func=func, func_kwargs=func_kwargs)
             return
         self.__dispatch.dispatch_one(basename, func, func_kwargs)
         return
+
