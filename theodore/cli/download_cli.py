@@ -1,5 +1,7 @@
 import json
+import struct
 import rich_click as click
+from sqlalchemy import Row
 from click_option_group import RequiredMutuallyExclusiveOptionGroup, optgroup
 from theodore.models.downloads import DownloadTable
 from theodore.managers.download_manager import DownloadManager
@@ -7,7 +9,7 @@ from theodore.managers.daemon_manager import Worker
 from theodore.core.utils import Downloads, user_error, user_info, DBTasks
 from theodore.cli.async_click import AsyncCommand
 from pathlib import Path
-from typing import Iterable, Mapping
+from typing import Iterable, Any
 
 downloader = Downloads(DownloadTable)
 manager = DownloadManager()
@@ -17,16 +19,18 @@ worker = Worker()
 #             Main Downloads CLI 
 # ------------------------------------------
 
-async def send_command(cmd, file_args: Iterable) -> str:
+async def send_command(cmd, file_args: Iterable) -> None:
 
     mail_data = {
         "cmd": cmd,
         "file_args": file_args
     }
 
-    mail_data: str = json.encoder.JSONEncoder().encode(mail_data)
-    response = await worker.send_signal(mail_data)
-    return response
+    message = json.dumps(mail_data).encode()
+    header = struct.pack("!I", len(message))
+
+    await worker.send_signal(header=header, message=message)
+    return
 
 async def resolve_file(filename):
     fullname = await get_full_name(filename)
@@ -49,7 +53,7 @@ async def get_full_name(filename):
     return await downloader.get_full_name(filename)
     
 
-async def get_file_obj(**kwargs):
+async def get_file_obj(**kwargs) -> Row[Any]:
     with DBTasks(DownloadTable) as db_manager:
         return await db_manager.get_features(and_conditions=kwargs, first=True)
 
@@ -72,12 +76,11 @@ async def file_(ctx: click.Context, url: str) -> None:
     urls_to_download = []
     urls = [u.strip() for u in url.split(',') if u.strip()]
     if not urls:
-        inform_client(message="No valid Urls to download")
+        await inform_client(message="No valid Urls to download")
         return
     
     urls_to_download.extend([downloader.parse_url(url) for url in urls])
 
-    response = "Before start"
     try:
         # bulk insert
         entries_to_insert = [url_map for url_map in urls_to_download if url_map.get('url') not in pending_downloads]
@@ -86,8 +89,7 @@ async def file_(ctx: click.Context, url: str) -> None:
         # -------------------------------------------------------------
         # 3. Queue Tasks and Database Insertion
         # -------------------------------------------------------------
-        response = await send_command(cmd="DOWNLOAD", file_args=urls_to_download)
-        await inform_client(message=response)
+        await send_command(cmd="DOWNLOAD", file_args=urls_to_download)
     finally:
         pass
 
@@ -98,16 +100,15 @@ async def cancel(ctx: click.Context, filename: str):
     """Cancel file download"""
     data = await resolve_file(filename=filename)
     if not data:
-        await inform_client(f"No currently downloading file with name {filename}")
+        await inform_client(message=f"No currently downloading file with name {filename}")
         return
-    response: str = await send_command(
+    await send_command(
         cmd="CANCEL", 
         file_args={
             "filename": data.filename,
             "filepath": data.filepath
             }
         )
-    await inform_client(message=response)
 
 
 @downloads.command(cls=AsyncCommand)
@@ -119,14 +120,13 @@ async def pause(ctx: click.Context, filename: str):
     if not data:
         await inform_client(message=f"No currently downloading file with name {filename}")
         return
-    response: str = await send_command(
+    await send_command(
         cmd="PAUSE", 
         file_args={
             "filename": data.filename, 
             "filepath": data.filepath
             }
         )
-    await inform_client(response)
 
 @downloads.command(cls=AsyncCommand)
 @optgroup.group(name="required field", cls=RequiredMutuallyExclusiveOptionGroup)
@@ -140,25 +140,21 @@ async def resume(ctx: click.Context, filename: str, all):
         if not data:
             await inform_client(message=f"No currently downloading file with name {filename}")
             return
-        response: str = await send_command(
+        await send_command(
             cmd="RESUME", 
             file_args={
                 "filename": data.filename, 
                 "filepath": data.filepath
                 }
             )
-        await inform_client(response)
-        return
         
     resumable_downloads = await downloader.get_undownloaded_urls()
     if not resumable_downloads:
-        inform_client(message="There are no pending downloads to continue.")
+        await inform_client(message="There are no pending downloads to continue.")
         return
     url_info = [ downloader.parse_url(url) for url in resumable_downloads ]
-    response = await send_command(cmd="DOWNLOAD", file_args=url_info)
-    await inform_client(message=response)
-    return
-
+    await send_command(cmd="DOWNLOAD", file_args=url_info)
+    
 
 @downloads.command(cls=AsyncCommand)
 @click.argument('filename')
@@ -171,5 +167,7 @@ async def status(ctx, filename):
         return
     status_text = "Completed" if data.is_downloaded else "In Progress/Paused"
     name = data.filename if len(data.filename) <= 30 else data.filename[:30] + '...'
+    _percentage = data.download_percentage
 
-    user_info(f"[File: {name}  | Status: {status_text} | Path: {data.filepath} | Downloaded size: {data.download_percentage}% done]")
+    percentage = "Completed" if data.is_downloaded else _percentage or "jj0" + "% done!" 
+    user_info(f"[File: {name}  | Status: {status_text} | Path: {data.filepath} | Downloaded size: {percentage}]")

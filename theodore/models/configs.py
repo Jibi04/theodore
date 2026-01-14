@@ -13,13 +13,13 @@ ConfigTable = Table(
     Column('api_key', String(150)),
 )
 
-def create_table():
-    try:
-        base_logger.internal('Creating configs table')
+# def create_table():
+#     try:
+#         base_logger.internal('Creating configs table')
 
-        asyncio.run(create_tables())
-        base_logger.internal('Configs table created')
-    except Exception as e:
-        error_logger.exception(e)
+#         asyncio.run(create_tables())
+#         base_logger.internal('Configs table created')
+#     except Exception as e:
+#         error_logger.exception(e)
 
-create_table()
+# create_table()
