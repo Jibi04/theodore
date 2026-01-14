@@ -1,8 +1,6 @@
 import asyncio
-import contextlib
 import json
 import psutil
-import signal
 import struct
 import time
 import threading
@@ -113,11 +111,11 @@ class Supervisor:
         self.tasks: set[asyncio.Task] = set()
 
     async def supervise(self, func, kwargs):
+        task_name = "Supervisor-"
         try:
             start = time.perf_counter()
             result = await func(**kwargs)
             current_task = asyncio.current_task()
-            task_name = "Supervisor-"
             if current_task:
                 task_name = current_task.get_name()
             user_info(f"Supervisor: Task done - {result} took: {round(time.perf_counter() - start, 2)}s")

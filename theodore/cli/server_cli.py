@@ -1,6 +1,3 @@
-# create a watcher daemon service that uses PSUTIll for CPU Monitoring with logging, 
-# it should also start the the client-server IPC socket. 
-# use asyncio.sleep() so the CPU isn't constantly bombarded with function calls
 import asyncio
 import click
 import json
