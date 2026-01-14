@@ -37,6 +37,8 @@ Thumbs.db
 data/
 *.sqlite
 
+tests/
+
 
 # json
 logs/*.json # Ignore all JSON files
