@@ -30,12 +30,8 @@ def theodore(ctx: click.Context, verbose):
     """🤖 Theodore — your personal CLI Assistant"""
 
     ctx.ensure_object(dict)
-    ctx.obj['worker'] = Worker()
     ctx.obj["verbose"] = verbose
     ctx.obj['task_manager'] = TaskManager()
-    ctx.obj['config_manager'] = ConfigManager()
-    ctx.obj['weather_manager'] = WeatherManager()
-    ctx.obj['download_manager'] = DownloadManager()
     ctx.obj['file_manager'] = FileManager()
 
     base_logger.internal("Theodore Initialized")

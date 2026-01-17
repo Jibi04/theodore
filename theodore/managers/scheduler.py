@@ -1,1 +1,0 @@
-# set schedules plan trips, plan daily routines etc
