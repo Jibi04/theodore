@@ -1,4 +1,5 @@
 import asyncio
+import heapq
 import getpass
 import json
 import psutil
@@ -7,14 +8,16 @@ import time
 import threading
 import traceback
 from asyncio.exceptions import IncompleteReadError
-from datetime import datetime as dt, UTC
+from datetime import datetime as dt, UTC, timedelta
 from pathlib import Path
-from typing import Mapping, Any
+from typing import Mapping, Any, Callable, Coroutine, Dict, Tuple, List
 from watchdog.observers import Observer
 from theodore.core.logger_setup import base_logger, error_logger
-from theodore.core.utils import user_info
+from theodore.core.utils import user_info, user_error
 from theodore.managers.download_manager import DownloadManager
-from theodore.managers.file_handler import FileEventManager
+from theodore.managers.event_handler import FileEventManager
+from theodore.tests.converters import get_timestamp, calculate_runtime_as_timestamp, is_ready_to_run, get_time_difference
+from theodore.managers.schedule_manager import JobManager, JobNotFoundError, ValidationError, InvalidScheduleTimeError, Job, InvalidCoroutineFunctionError, Status, Trigger
 
 
 class Signal:
@@ -35,8 +38,9 @@ class Signal:
         await self._signal_shutdown_event.wait()
         
         self._server.close()
+        # await self._server.wait_closed()
         user_info(
-            f"Signal: Server closed! at: {dt.now(UTC).strftime("%d/%m/%y, %H:%M:%S")} UTC"
+            f"Signal: Server closed! at: {dt.now(UTC).strftime('%d/%m/%y, %H:%M:%S')} UTC"
         )
         self.socket.unlink(missing_ok=True)
         self._signal_shutdown_event.clear()
@@ -68,7 +72,7 @@ class SytemMonitor:
                 raise
             except KeyboardInterrupt:
                 raise
-            self._monitor_shutdown_event.wait(interval)
+            self._monitor_shutdown_event.wait()
 
     def stop(self) -> None:
         if self._monitor_shutdown_event.is_set():
@@ -107,6 +111,175 @@ class Dispatch:
         return await asyncio.gather(*self.supervisor.tasks, return_exceptions=True)
 
 
+class Scheduler:
+    def __init__(self):
+        self._running_jobs: set[Job] = set()
+        self._job_manager: JobManager = JobManager()
+        self._dispatch = Dispatch()
+        self._heaper = Heaper()
+        self.__in_active_jobs: Dict[Any, Job] = {}
+        self.__scheduler_shutdown_event = asyncio.Event()
+        self.__sleep_event = asyncio.Event()
+
+    def new_job(
+            self, 
+            *,
+            key: Any,
+            func: Callable[..., Coroutine[Any, Any, Any]], 
+            kwargs: Dict[Any, Any] | None = None,
+            trigger: Trigger = Trigger.interval,
+            seconds: float | str = "*",
+            min: float | str = "*",
+            hour: int | str = "*",
+            dow: int | None = None,
+            profiling_enabled: bool = False
+        ):
+
+        time_blueprint = {
+            "second": seconds,
+            "minute": min,
+            "hour": hour,
+        }
+
+        runtime_registry = {}
+        for key, val in time_blueprint.items():
+            if val != "*":
+                runtime_registry[key] = val
+
+        if not asyncio.iscoroutinefunction(func=func):
+            raise InvalidCoroutineFunctionError("Function is Not a coroutine Function")
+        
+        runtime = calculate_runtime_as_timestamp(target=runtime_registry, dow=dow)
+        if runtime is None:
+            user_error(f"Invalid time Args. {json.dumps(runtime_registry, indent=2)}")
+            return
+
+        try:
+            job = self._job_manager.add_job(
+                key=key,
+                func=func,
+                next_runtime=runtime,
+                kwargs=kwargs,
+                trigger=trigger,
+                status=Status.active,
+                runtime_registry=runtime_registry,
+                profiling_enabled=profiling_enabled
+            )
+        except ValidationError as e:
+            raise
+
+        self.__in_active_jobs[key] = job
+        self._heaper.add_to_heap(job=job)
+        self.__sleep_event.set()
+
+    async def start(self):
+        user_info("Scheduler Running")
+        while not self.__scheduler_shutdown_event.is_set():
+            if not self._heaper.heap:
+                sleep_task = asyncio.create_task(self.__sleep_event.wait())
+                shutdown_task = asyncio.create_task(self.__scheduler_shutdown_event.wait())
+                
+                done, pending = await asyncio.wait(
+                    [sleep_task, shutdown_task],
+                    return_when=asyncio.FIRST_COMPLETED
+                )
+                # cleanup
+                for t in pending: t.cancel() 
+
+                self.__sleep_event.clear()
+                if self.__scheduler_shutdown_event.is_set(): break
+                
+                if not self._heaper.heap: continue
+
+            runtime, key = self._heaper.peek_first()
+            diff = max(get_time_difference(runtime), 0)
+
+            if diff > 0:
+                sleep_task = asyncio.create_task(self.__sleep_event.wait())
+                shutdown_task = asyncio.create_task(self.__scheduler_shutdown_event.wait())
+                
+                # Race the clock vs the signals
+                done, pending = await asyncio.wait(
+                    [sleep_task, shutdown_task],
+                    timeout=diff,
+                    return_when=asyncio.FIRST_COMPLETED
+                )
+                for t in pending: t.cancel() # Clean up
+                self.__sleep_event.clear()
+                
+                if self.__scheduler_shutdown_event.is_set(): break
+                if sleep_task in done: continue 
+
+            # If we reach here, the timeout expired or diff was 0: TIME TO RUN
+            job = self.__in_active_jobs.get(key)
+            if job:
+                self.start_job(job=job)
+                self._heaper.remove()
+        user_info("Scheduler Shutdown.")
+
+
+    def start_job(self, job: Job):
+        next_runtime = calculate_runtime_as_timestamp(
+                target=job.runtime_registry, 
+                dow=job.dow
+                )
+        
+        if next_runtime is None:
+            raise InvalidScheduleTimeError(f"Unable to understand job time parameters '{job.dow}'")
+        
+        if job.trigger.value == "cron":
+            job.next_runtime = next_runtime
+            self._heaper.add_to_heap(job)
+            self.__sleep_event.set()
+            
+        
+        coro_func = job.func
+        kwargs = job.kwargs
+        name = f"Sheduler"
+
+        if isinstance(kwargs, list):
+            self._dispatch.dispatch_many(
+                basename=name,
+                func=coro_func,
+                func_kwargs=kwargs
+                )
+        else:
+            self._dispatch.dispatch_one(
+                basename=name,
+                func=coro_func,
+                func_kwargs=kwargs
+            )
+        
+        self._running_jobs.add(job)
+
+    def stop(self):
+        self.__scheduler_shutdown_event.set()
+            
+    
+class Heaper:
+    def __init__(self):
+        self.heap: List[Tuple[float, Any]] = list()
+        heapq.heapify(self.heap)
+
+    def add_to_heap(self, job: Job):
+        runtime = job.next_runtime
+        key = job.key
+
+        heapq.heappush(self.heap, (runtime, key))
+
+    def peek_first(self):
+        return self.heap[0]
+    
+    def get_first(self):
+        return heapq.heappop(self.heap)
+    
+    def update_heap(self, runtime: float, key: Any):
+        heapq.heappushpop(self.heap, (runtime, key))
+
+    def remove(self):
+        heapq.heappop(self.heap)
+
+
 class Supervisor:
 
     def __init__(self):
@@ -133,24 +306,21 @@ class Supervisor:
                 error_stack=self.__log_handler.format_error(),
                 reason="Task Cancelled"
             )
-        except (KeyboardInterrupt, InterruptedError):
-            self.__log_handler.inform_error_logger(
-                task_name=task_name,
-                error_stack=self.__log_handler.format_error(),
-                reason="Task Interupted"
-            )
+            raise
         except (OSError, RuntimeError) as e:
             self.__log_handler.inform_error_logger(
                 task_name=task_name,
                 error_stack=self.__log_handler.format_error(),
                 reason=type(e).__name__
             )
+            raise
         except Exception as e:
-            self.__log_handler.inform_error_logger(
-                task_name=task_name,
-                error_stack=self.__log_handler.format_error(),
-                reason=type(e).__name__
-            )
+            raise
+            # self.__log_handler.inform_error_logger(
+            #     task_name=task_name,
+            #     error_stack=self.__log_handler.format_error(),
+            #     reason=type(e).__name__
+            # )
 
 
 class LogsHandler:
@@ -210,6 +380,7 @@ class Worker:
     def __init__(self):
         self.__signal = Signal(client_cb=self.handler)
         self.__dispatch = Dispatch()
+        self.__scheduler = Scheduler()
         self.__monitor = SytemMonitor()
         self.__log_handler = LogsHandler()
         self.__file_event_handler = FileEventHandler(observer_path="~/Downloads", target_path="Theodore_etl")
@@ -242,6 +413,11 @@ class Worker:
             name="file-event-handler"
         )
 
+        asyncio.create_task(
+            self.__scheduler.start(),
+            name="Scheduler"
+        )
+
         self.signal_task = asyncio.create_task(
             self.__signal.start(),
             name="unix-server"
@@ -255,6 +431,7 @@ class Worker:
         await self.__dispatch.shutdown()
         self.__monitor.stop()
         self.__file_event_handler.stop()
+        self.__scheduler.stop()
         self.__signal.stop()
 
         # Await server shutdown
@@ -321,21 +498,24 @@ class Worker:
         except asyncio.CancelledError:
             raise
         except (BrokenPipeError, OSError, IncompleteReadError) as e:
-            self.__log_handler.inform_error_logger(
-                task_name=f"Handler-{cmd}",
-                error_stack=self.__log_handler.format_error(),
-                reason=type(e).__name__
-            )
-            return
+            # self.__log_handler.inform_error_logger(
+            #     task_name=f"Handler-{cmd}",
+            #     error_stack=self.__log_handler.format_error(),
+            #     reason=type(e).__name__
+            # )
+            # return
+            raise
         except Exception as e:
-            self.__log_handler.inform_error_logger(
-                task_name=f"Handler-Error",
-                error_stack=self.__log_handler.format_error(),
-                reason="Handler Error"
-            )
+            # self.__log_handler.inform_error_logger(
+            #     task_name=f"Handler-Error",
+            #     error_stack=self.__log_handler.format_error(),
+            #     reason="Handler Error"
+            # )
+            raise
         finally:
-            writer.close()
-            await writer.wait_closed()
+            if writer and not writer.is_closing():
+                writer.close()
+                await writer.wait_closed()
 
     async def send_signal(self, header: bytes, message: bytes):
         try:
@@ -379,7 +559,7 @@ class Worker:
                 status="Signal Not sent!"
                 )
         finally:
-            if not writer.is_closing():
+            if writer and not writer.is_closing():
                 writer.close()
                 await writer.wait_closed()
 
