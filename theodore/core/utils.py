@@ -1,17 +1,17 @@
 import dateparser 
-import re, asyncio
-from typing import Dict, Annotated, Literal
-from rich.table import Table
-from sqlalchemy import Table as sql_table
-from pathlib import Path
-from theodore.core.logger_setup import base_logger, error_logger
+import re
 import tempfile
-from zoneinfo import ZoneInfo
-from urllib.parse import unquote, urlparse
-
-from functools import partial
-from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
+from functools import partial
+from pathlib import Path
+from pydantic import BaseModel, ConfigDict, Field
+from rich.table import Table
+from sqlalchemy import Table as sql_table, Row, Sequence
+from typing import Dict, Annotated, Any
+from urllib.parse import unquote, urlparse
+from zoneinfo import ZoneInfo
+from theodore.core.logger_setup import base_logger, error_logger
+
 
 # -------------------------
 # Global Variables 
@@ -25,19 +25,19 @@ TEMP_DIR.mkdir(parents=True, exist_ok=True)
 JSON_DIR.mkdir(parents=True, exist_ok=True)
 FILE = JSON_DIR / "cache.json"
 
-def user_success(msg):
+def user_success(msg: str):
     return base_logger.info(f'[success]{msg}')
 
-def user_warning(msg):
+def user_warning(msg: str):
     return base_logger.warning(f'[warning]{msg}')
 
-def user_error(msg):
+def user_error(msg: str):
     return error_logger.error(f'[error]{msg}')
 
-def user_info(msg):
+def user_info(msg: str):
     return base_logger.info(msg)
 
-def send_message(ok, message=None, date=None, data=None):
+def send_message(ok, message: str | None =None, date: datetime | None=None, data: Any | None=None):
     return {'ok': ok, 'message': message, 'data': data, 'date': date}
 
 def normalize_ids(task_id = None, task_ids = None):
@@ -54,11 +54,11 @@ def normalize_ids(task_id = None, task_ids = None):
     return cleaned_ids
 
 def parse_date(date: str) -> dict:
-    date = dateparser.parse(date)
+    _date = dateparser.parse(date)
     if date is None:
         message = 'unable to parse date'
         return send_message(False, message)
-    return send_message(True, 'Date Parsed', date=date)
+    return send_message(True, 'Date Parsed', date=_date)
 
 def get_task_table(data, deleted=False):
     table = Table()
@@ -121,14 +121,11 @@ def get_configs_table(data):
         )
     return table
 
-def get_current_weather_table(**kwargs):
-    pass
-
 from theodore.models.base import get_async_session
 from sqlalchemy import select, insert, update, delete, and_, or_, text
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 
-class DB_tasks:
+class DBTasks:
     """
     Write, update, delete, select rows and feartures from your db, Asynchronously
     """
@@ -140,7 +137,7 @@ class DB_tasks:
     def __enter__(self):
         return self
     
-    def _get_conditions(self, conditions_dict: dict) -> list:
+    def _get_conditions(self, conditions_dict: dict | None) -> list:
             if not conditions_dict: 
                 return []
             
@@ -155,7 +152,7 @@ class DB_tasks:
                         )
             return conditionals
     
-    def _sort_conditions(self, and_conditions: dict, or_conditions: dict) -> list:
+    def _sort_conditions(self, and_conditions: dict | None, or_conditions: dict | None) -> list:
         """
         Sorts all conditions and returns a final conditions
         returns all sorted conditions as a list
@@ -191,7 +188,7 @@ class DB_tasks:
                 data = ''
             return send_message(True, data=data)
 
-    async def get_features(self, and_conditions: dict = None, or_conditions: dict = None, first=False) -> list[tuple]:
+    async def get_features(self, and_conditions: dict | None = None, or_conditions: dict | None= None, first = False) -> Sequence[Row[Any]] | Row[Any] | None:
         """Queries your DB Using SELECT with conditions as WHERE if conditions are None, returns all rows in the DB"""
         if not isinstance(self.table, sql_table):
             raise TypeError(f"Expected a Table class got {type(self.table)}.")
@@ -213,21 +210,29 @@ class DB_tasks:
                 await session.rollback()
                 raise
 
-    async def upsert_features(self, values: Dict, primary_key: Dict = None) -> Dict:
+    async def upsert_features(self, values: Dict | list, primary_key: Dict | None = None, bulk: bool=False) -> Dict:
         async with get_async_session() as session:
             try:
-                if not isinstance(values, dict):
+                if not isinstance(values, (dict, list)):
                     raise TypeError(f'Expected \'{dict.__name__}\' but got \'{type(values)}\'.')
                 stmt = insert(self.table).values(values)
                 await session.execute(stmt)
+                return send_message(True, message='Done!')
             except IntegrityError:
-                key, val  = primary_key or next(iter(values), {})
-                stmt = update(self.table).where(key == val).values(values)
+                if primary_key is None:
+                    raise ValueError("Cannot update database without a known key-value condition")
+                if not isinstance(primary_key, dict):
+                    raise TypeError(f"Expected a Dict object got a {type(primary_key)}.")
+
+                conditions = self._get_conditions(conditions_dict=primary_key)
+                if not conditions:
+                    raise ValueError(f"Cannot update tasks unknown primary values.")
+                stmt = update(self.table).where(*conditions).values(values)
                 await session.execute(stmt)
+                return send_message(True, message='Done!')
             finally:
                 await session.commit()
                 await session.close()
-            return send_message(True, message='Done!')
 
     async def permanent_delete(self, or_conditions, and_conditions, query = None) -> None:
         final_conditions = self._sort_conditions(or_conditions=or_conditions, and_conditions=and_conditions)
@@ -266,7 +271,7 @@ class DB_tasks:
 
 
     def __repr__(self):
-        return f"DB_tasks(table={self.table.name})"
+        return f"DBTasks(table={self.table.name})"
     
     def __str__(self):
         return f"table name '{self.table.name}'"
@@ -281,9 +286,9 @@ class DB_tasks:
 
 class Downloads:
     def __init__(self, table: sql_table):
-        self.file_downloader = table
+        self.table = table
 
-    def parse_url(self, url: str, full_path: Path=None) -> dict:
+    def parse_url(self, url: str, full_path: Path | str = "~/Downloads") -> dict:
         """
         Parses urls using unqote and urlparse
         return url filename
@@ -293,24 +298,23 @@ class Downloads:
         url_name = Path(unquote(urlparse(url).path)).name
         return_map['url'] = url
         return_map['filename'] = url_name
-        if full_path: return_map['filepath'] = full_path / url_name
+        return_map['filepath'] = f"{full_path}/{url_name}"
         
         return return_map
 
-    async def get_undownloaded_urls(self) -> list[str] | list:
+    async def get_undownloaded_urls(self) -> Sequence[str]:
         """
         Queries db for undownloded files
         returns list
         """
         async with get_async_session() as session:
-            stmt = (select(self.file_downloader.c.url)
+            stmt = (select(self.table.c.url)
                     .where(
-                        self.file_downloader.c.is_downloaded.is_(False)
+                        self.table.c.is_downloaded.is_(False)
                         )
                     )
             result = await session.execute(stmt)
             return result.scalars().all()
-        return []
     
     async def get_download_status(self, conditions):
         """get a single feature"""
@@ -318,19 +322,19 @@ class Downloads:
             raise TypeError(f"Expected a Table class got {type(self.table)}.")
         final_conditions = []
         for key, val in conditions.items():
-            if hasattr(self.file_downloader.c, key):
-                Column = getattr(self.file_downloader, key)
+            if hasattr(self.table.c, key):
+                Column = getattr(self.table, key)
                 final_conditions.append(Column == val)
             else:
                 raise AttributeError(
                     f"Column '{key}' non-existent on table '{self.table.name}'. "
                     )
         async with get_async_session() as session:
-            stmt = (select(self.file_downloader.c.download_percentage).where(*final_conditions).limit(1))
+            stmt = (select(self.table.c.download_percentage).where(*final_conditions).limit(1))
             response = await session.execute(stmt)
             return response.scalar_one_or_none()
 
-    async def bulk_insert(self, table: Table, values: list[dict]) -> None:
+    async def bulk_insert(self, table: sql_table, values: list[dict]) -> None:
         """
         Insert values into table
         Args:
@@ -339,17 +343,17 @@ class Downloads:
         returns None
         """
         try:
-            with DB_tasks(table) as db_manager:
-                await db_manager.insert_features(values=values)
+            with DBTasks(table) as db_manager:
+                await db_manager.upsert_features(values=values)
         except SQLAlchemyError:
             raise
         
     async def get_full_name(self, filename):
         async with get_async_session() as session:
-            stmt = (select(self.file_downloader.c.filename)
+            stmt = (select(self.table.c.filename)
                     .where(
-                        self.file_downloader.c.filename.ilike(f'{filename}%'),
-                        self.file_downloader.c.is_downloaded.is_(False)
+                        self.table.c.filename.ilike(f'%{filename}%'),
+                        self.table.c.is_downloaded.is_(False)
                         )
                     .limit(1)
                 )
@@ -357,10 +361,10 @@ class Downloads:
             return results.scalar_one_or_none()
     
     def __repr__(self):
-        return f"Downloads(table={self.file_downloader.name})"
+        return f"Downloads(table={self.table.name})"
     
     def __str__(self):
-        return f"table name '{self.file_downloader.name}'"
+        return f"table name '{self.table.name}'"
     
 class WeatherModel(BaseModel):
     model_config = ConfigDict(extra='ignore')
@@ -368,7 +372,7 @@ class WeatherModel(BaseModel):
     country: str
     time_requested: Annotated[datetime, Field(default_factory=partial(datetime.now, tz=local_tz))]
 
-class Current_(WeatherModel):
+class CurrentModel(WeatherModel):
     model_config = ConfigDict(extra='ignore')
 
     text: Annotated[str | None, Field(alias='text')]
@@ -381,7 +385,7 @@ class Current_(WeatherModel):
     wind_mph: Annotated[float, Field(alias='wind_mph')]
     wind_dir: Annotated[float, Field(alias='wind_dir')]
 
-class Alerts_(WeatherModel):
+class AlertsModel(WeatherModel):
     model_config = ConfigDict(extra='ignore')
 
     headline: Annotated[str | None, Field(alias='headline')]
@@ -395,7 +399,7 @@ class Alerts_(WeatherModel):
     instructions: Annotated[str | None, Field(alias='instructions')]
 
 
-class Forecast_(WeatherModel):
+class ForecastModel(WeatherModel):
     model_config = ConfigDict(extra='ignore')
 
     sunrise: Annotated[datetime, Field(alias='sunrise')]

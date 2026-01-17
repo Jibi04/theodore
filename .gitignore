@@ -26,10 +26,18 @@ dist/
 
 # SQLite databases (if generated locally)
 *.db
+.SQLite
+.sqlite
 
 # OS-specific
 .DS_Store
 Thumbs.db
+
+
+data/
+*.sqlite
+
+tests/
 
 
 # json

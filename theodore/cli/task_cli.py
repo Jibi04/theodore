@@ -1,6 +1,5 @@
 import click
 import rich_click as click
-import re
 from theodore.cli.async_click import AsyncCommand
 
 from dateparser import parse
@@ -16,31 +15,24 @@ from theodore.core.theme import console
 def task_manager(ctx):
     """Manage to-dos"""
 
-
 @task_manager.command(cls=AsyncCommand)
 @click.option('--title', '-t', type=str, help="task title", required=True)
 @click.option('--description', '-d', type=str, help='comma separated text')
 @click.option('--status', '-s', type=click.Choice(['pending', 'in_progress', 'completed', 'not_completed']), help='task status')
-@click.option('--due', type=str, help='task due-date format(yyyy-mm-dd H:M:S, next-week, tommorow, 9am monday)')
+@click.option('--due', type=str, default=None, help='task due-date format(yyyy-mm-dd H:M:S, next-week, tommorow, 9am monday)')
 @click.option('--remind', is_flag=True, help='set reminder')
 @click.pass_context
-async def new(ctx, title: str, description: str, status: str, due: str, remind: bool):
+async def new(ctx, **kwargs):
     """Create new task"""
     base_logger.internal('getting manager from task manager')
     manager = ctx.obj['task_manager']
-    args_map = ctx.params
+    args_map = kwargs
 
     try: 
-
-        if due:
-            base_logger.internal(f'parsing due date {due}')
+        due = args_map.get('due', None)
+        if due is not None:
             due = parse(due)
-            if due is None:
-                user_error("Invalid date format")
-                return
-        else:
-            due = None
-            
+
         args_map['due'] = due
 
         args_map = {key: val for key, val in args_map.items() if val is not None}
@@ -61,8 +53,9 @@ async def new(ctx, title: str, description: str, status: str, due: str, remind: 
 
         user_success(msg)
         base_logger.debug(f"new task created task-obj: {task}")
-
-
+    except TypeError:
+        user_error(f"Invalid Due date")
+        return
     except SQLAlchemyError as e:
         base_logger.internal('A Database error occurred Aborting ...')
         user_error(f"Database Error: {e}") 
@@ -72,17 +65,17 @@ async def new(ctx, title: str, description: str, status: str, due: str, remind: 
         user_error(f"{type(e).__name__}: {e}")
         return
 
-    if remind:
-        base_logger.internal('user wants a scheduler')
-        base_logger.internal('creating scheduler ...')
-        if not due:
-            user_warning('Cannot set reminder without due date')
-            due_date = click.input('Due date fmt - (yyy-mm-dd) q - quit(): ')
+    # if remind:
+    #     base_logger.internal('user wants a scheduler')
+    #     base_logger.internal('creating scheduler ...')
+    #     if not due:
+    #         user_warning('Cannot set reminder without due date')
+    #         due_date = click.input('Due date fmt - (yyy-mm-dd) q - quit(): ')
 
-            if due_date.lower().strip() == 'q': 
-                base_logger.internal('user opted to abort shedule creation')
-                user_info('Aborting scheduler')
-                return
+    #         if due_date.lower().strip() == 'q': 
+    #             base_logger.internal('user opted to abort shedule creation')
+    #             user_info('Aborting scheduler')
+    #             return
     return
 
 

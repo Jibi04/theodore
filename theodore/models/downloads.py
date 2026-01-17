@@ -1,10 +1,9 @@
-from sqlalchemy import Column, String, DateTime, Boolean, Table, delete, Integer
-from theodore.models.base import meta, engine
-from theodore.core.utils import local_tz, base_logger, user_success
-from datetime import datetime
-import asyncio
+from sqlalchemy import Column, String, DateTime, Boolean, Table, Integer
+from theodore.models.base import meta
+from theodore.core.utils import local_tz
 
-file_downloader = Table(
+
+DownloadTable= Table(
     'download_manager',
     meta,
     Column('filename', String, nullable=False),

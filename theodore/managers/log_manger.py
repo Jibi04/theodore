@@ -7,7 +7,7 @@ import re, os
 # Pseudo-code
 # --------------------------
 
-class Log_manager:
+class LogManager:
 
     def get_file_ranges(self, filepath, num_of_chunks):
         """

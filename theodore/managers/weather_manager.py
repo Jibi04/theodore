@@ -5,21 +5,21 @@ from datetime import datetime, timedelta
 from rich.table import Table
 from theodore.core.theme import console
 from theodore.core.logger_setup import base_logger
-from theodore.core.utils import send_message, DATA_DIR, user_error, DB_tasks, local_tz, Current_, Alerts_, Forecast_, WeatherModel
+from theodore.core.utils import send_message, DATA_DIR, user_error, DBTasks, local_tz, CurrentModel, AlertsModel, ForecastModel, WeatherModel
 from theodore.models.base import get_async_session
-from theodore.models.configs import Configs_table
+from theodore.models.configs import ConfigTable
 from theodore.models.weather import Current, Alerts, Forecasts
 from sqlalchemy import select, or_
-from theodore.managers.configs_manager import Configs_manager
+from theodore.managers.configs_manager import ConfigManager
 from httpx import ConnectTimeout, ReadTimeout, ReadError, DecodingError
 from typing import Type, TypeVar, Dict
 
 DOTENV_PATH = find_dotenv()
 load_dotenv(DOTENV_PATH)
 
-configs = Configs_manager()
+configs = ConfigManager()
 ua = fake_user_agent.user_agent()
-manager = Configs_manager()
+manager = ConfigManager()
 
 CACHE_DIR = DATA_DIR / "cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -27,7 +27,7 @@ T = TypeVar('T', bound=WeatherModel)
 
 FILE_PATH = CACHE_DIR / 'dummy.cache'
 
-class Weather_manager:
+class WeatherManager:
 
     def validate_data(self, schema: Type[T], raw_data: dict, extra_context: dict):
         return schema(**raw_data, **extra_context).model_dump()
@@ -63,7 +63,7 @@ class Weather_manager:
         if cache is not None:
             return send_message(True, data=cache)
 
-        with DB_tasks(Configs_table) as config_manager:
+        with DBTasks(ConfigTable) as config_manager:
             defaults = await config_manager.get_features({'category': 'weather'}, first=True)
 
         if location is None:
@@ -127,9 +127,9 @@ class Weather_manager:
                 return send_message(False, message=f"[red bold][!] An API error occurred:[/red bold] {final_message}")
 
             registry = {
-                'current': {'table': Current, 'schema': Current_, 'path': ['current']},
-                'forecast': {'table': Forecasts, 'schema': Forecast_, 'path': ['forecast', 'forecastday', 0, {'split': ['day', 'astro']}]},
-                'alerts': {'table': Alerts, 'schema': Alerts_, 'path': ['alerts', 'alert']}
+                'current': {'table': Current, 'schema': CurrentModel, 'path': ['current']},
+                'forecast': {'table': Forecasts, 'schema': ForecastModel, 'path': ['forecast', 'forecastday', 0, {'split': ['day', 'astro']}]},
+                'alerts': {'table': Alerts, 'schema': AlertsModel, 'path': ['alerts', 'alert']}
             }
 
             reg = registry[query]
@@ -148,7 +148,7 @@ class Weather_manager:
             table = reg['table']
             data_dict = self.validate_data(reg['schema'], raw_data=nested_data, extra_context=extra_context)
             
-            await DB_tasks(table).upsert_features(values=data_dict)
+            await DBTasks(table).upsert_features(values=data_dict)
             return send_message(True, data=data_dict)
         
 

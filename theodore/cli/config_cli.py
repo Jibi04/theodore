@@ -2,17 +2,15 @@ from pathlib import Path
 import click
 import rich_click as click
 from click_option_group import optgroup, RequiredMutuallyExclusiveOptionGroup, RequiredAnyOptionGroup
-from theodore.managers.configs_manager import Configs_manager
+from theodore.managers.configs_manager import ConfigManager
 from theodore.cli.async_click import AsyncCommand
-from theodore.models.configs import Configs_table
-from theodore.core.utils import DB_tasks, get_configs_table
 from theodore.core.theme import cli_defaults, console
 from theodore.core.logger_setup import base_logger
 from theodore.core.utils import user_error, user_success
 
 cli_defaults()
 
-configs_manager = Configs_manager()
+configs_manager = ConfigManager()
 
 @click.group()
 @click.pass_context

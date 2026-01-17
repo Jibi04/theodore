@@ -1,6 +1,5 @@
 from rich.console import Console
 from rich.theme import Theme
-import click 
 
 def cli_defaults():
     import rich_click as cl
@@ -15,5 +14,5 @@ def cli_defaults():
 
     return
 
-custome_theme = Theme(styles={"error": "bold red", "success": "green", "warning": "bold magenta"})
-console = Console(theme=custome_theme)
+custom_theme = Theme(styles={"error": "bold red", "success": "green", "warning": "bold magenta"})
+console = Console(theme=custom_theme)

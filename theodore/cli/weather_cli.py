@@ -4,12 +4,12 @@ import asyncio
 from pydantic import BaseModel, Field
 
 from theodore.cli.async_click import AsyncCommand
-from theodore.managers.weather_manager import Weather_manager
-from theodore.core.utils import base_logger, user_error, DB_tasks
+from theodore.managers.weather_manager import WeatherManager
+from theodore.core.utils import base_logger, user_error, DBTasks
 from theodore.core.theme import console
-from theodore.models.configs import Configs_table
+from theodore.models.configs import ConfigTable
 
-weather_manager = Weather_manager()
+weather_manager = WeatherManager()
 # def get_location():
 #     loop = asyncio.get_running_loop()
 #     loop.
@@ -19,7 +19,7 @@ weather_manager = Weather_manager()
 @click.pass_context
 def weather(ctx):
     """Get Live Weather Updates"""
-    config_manager = DB_tasks(Configs_table)
+    config_manager = DBTasks(ConfigTable)
     weather_defaults = asyncio.run(config_manager.get_features({'category': 'weather'}, first=True))
     ctx.obj['default_location'] = weather_defaults.default_location
 
