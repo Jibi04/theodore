@@ -16,7 +16,7 @@ from theodore.core.logger_setup import base_logger, error_logger
 from theodore.core.utils import user_info, user_error
 from theodore.managers.download_manager import DownloadManager
 from theodore.managers.event_handler import FileEventManager
-from theodore.tests.converters import get_timestamp, calculate_runtime_as_timestamp, is_ready_to_run, get_time_difference
+from theodore.core.time_converters import get_timestamp, calculate_runtime_as_timestamp, is_ready_to_run, get_time_difference
 from theodore.managers.schedule_manager import JobManager, JobNotFoundError, ValidationError, InvalidScheduleTimeError, Job, InvalidCoroutineFunctionError, Status, Trigger
 
 
