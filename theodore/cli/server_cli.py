@@ -9,12 +9,7 @@ from theodore.managers.daemon_manager import Worker
 
 WORKER = Worker()
 
-@click.group()
-@click.pass_context
-def servers(ctx: click.Context):
-    """Manage Servers and processes"""
-
-@servers.command(cls=AsyncCommand)
+@click.command(cls=AsyncCommand)
 @click.pass_context
 async def start_servers(ctx: click.Context):
     """Start Servers and processes"""
@@ -25,7 +20,7 @@ async def start_servers(ctx: click.Context):
         await WORKER.stop_processes()
 
 
-@servers.command(cls=AsyncCommand)
+@click.command(cls=AsyncCommand)
 @click.pass_context
 async def stop_servers(ctx: click.Context):
     """

@@ -127,7 +127,7 @@ def move_unknown_destination(
     return destination, resolve_path(src)
 
 
-def undo_move() -> None:
+def undo() -> None:
     logger = get_file_logs()
     _, last_task = logger.popitem()
 

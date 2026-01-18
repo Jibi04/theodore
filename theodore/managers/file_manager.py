@@ -62,7 +62,7 @@ class FileManager:
     
     
     def undo_move(self):
-        return undo_move()
+        return undo()
 
 
     def delete_file(self, *, src: Path | str, all: bool = False) -> None:

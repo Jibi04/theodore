@@ -29,16 +29,6 @@ def clean_records(df: pd.DataFrame) -> pd.DataFrame:
         clean_col_df = clean_column_names(df)
     except ValueError:
         raise 
-
-    # clean_col_df.replace(
-    #     {
-    #         r"[^A-Za-z0-9]": "",
-    #         r"['null', 'Null', 'NULL', 'N/A', None, 'None', 'nan']": pd.NA
-    #     },
-    #     inplace=True,
-    #     regex=True
-    # )
-
     try:
         obj_cols =  clean_col_df.select_dtypes('object').columns
         clean_col_df[obj_cols] = clean_col_df[obj_cols].apply(lambda x: x.str.strip())

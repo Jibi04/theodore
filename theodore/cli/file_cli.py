@@ -57,10 +57,10 @@ def undo(ctx):
     return
 
 @file_manager.command()
-@click.option('--source-dir', default='/home/jibi/Downloads')
+@click.option('--source-dir', default=".", required=True)
 @click.pass_context
 def organize(ctx, source_dir):
-    """Automate files movements"""
+    """Automate file Movement, source directory defaults to current directory."""
     manager: FileManager = ctx.obj['file_manager']
     manager.organize_files(src=source_dir)
     return
