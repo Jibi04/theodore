@@ -6,9 +6,9 @@ def cli_defaults():
     from rich.traceback import install
 
     cl.rich_click.STYLE_COMMANDS_TABLE_SHOW_LINES = False
-    cl.rich_click.MAX_WIDTH = 100
+    # cl.rich_click.MAX_WIDTH = 170
     cl.rich_click.STYLE_OPTION = "bold cyan"
-    cl.rich_click.STYLE_COMMANDS_PANEL = "bold yellow"
+    # cl.rich_click.STYLE_COMMANDS_PANEL = "bold yellow"
 
     install(console=console, word_wrap=True, show_locals=True)
 

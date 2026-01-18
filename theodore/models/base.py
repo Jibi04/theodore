@@ -11,7 +11,7 @@ load_dotenv(ENV_PATH)
 def create_engine():
     db_name = os.getenv('DB_NAME')
     BASE_DIR = Path(__file__).parent.parent.resolve()
-    DB_PATH = BASE_DIR / 'data' / db_name
+    DB_PATH = Path(f"{BASE_DIR}/data/{db_name}")
 
     DB = f"sqlite+aiosqlite:///{DB_PATH}"
     # engine = create_async_engine(DB, echo=True) 
