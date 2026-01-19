@@ -1,8 +1,9 @@
 # set schedules plan trips, plan daily routines etc
 from enum import Enum
 from datetime import datetime, UTC
+from dataclasses import dataclass, Field
 from pydantic import BaseModel, Field, ConfigDict, ValidationError
-from typing import Coroutine, Any, Callable, Dict, List
+from typing import Coroutine, Any, Callable, Dict, List, Literal
 
 
 
@@ -23,31 +24,31 @@ class Trigger(Enum):
     cron = "cron"
 
 
-
 class Job(BaseModel):
     model_config = ConfigDict(validate_assignment=True)
     key: Any
-    func: Callable[..., Coroutine[Any, Any, Any]]
-    dow: int | None = None
+    func: Callable[[Any], None]
     next_runtime: float
-    kwargs: Dict[Any, Any] | List[Dict[str, Any]] | None = None
-    trigger: Trigger = Trigger.interval
+    trigger: Literal["interval", "cron"]
     runtime_registry: Dict[str, Any]
+    func_args: Dict[Any, Any] | List[Dict[str, Any]] | None = None
+    dow: int | None = None
     profiling_enabled: bool = False
     status: Status = Status.inactive
     date_created: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+
 class JobManager:
     def __init__(self):
-        self._all_jobs: set[Job] = set()
+        self._all_jobs: Dict[str, Job] = {}
 
     def add_job(
             self,
             key: Any,
-            func: Callable[..., Coroutine[Any, Any, Any]], 
+            func: Callable[..., Any], 
             next_runtime: float,
-            kwargs: Dict[Any, Any] | None = None,
+            func_args: Dict[Any, Any] | None = None,
             **extra
         ) -> Job:
         
@@ -57,16 +58,16 @@ class JobManager:
             job = Job(
                 key=key,
                 func=func, 
-                kwargs=kwargs, 
+                func_args=func_args, 
                 next_runtime=next_runtime,
                 **extra
             )
+            self._all_jobs[job.key] = job
+            return job
         except ValidationError:
             # Job add should catch error and log error, not crash the scheduler.
             raise
 
-        self._all_jobs.add(job)
-        return job
 
     def modify_job(self, key, **data):
         job = self.verify_key(key)
@@ -76,8 +77,8 @@ class JobManager:
         try:
             new_job = self.validate_job(job=job, values=data)
 
-            self._all_jobs.discard(job)
-            self._all_jobs.add(new_job)
+            self._all_jobs.pop(job.key)
+            self._all_jobs[new_job.key] = new_job
         except ValidationError:
             raise
 
@@ -86,7 +87,7 @@ class JobManager:
         if job is None:
             raise JobNotFoundError(f"Invalid Job Key. '{key}'")
         
-        self._all_jobs.discard(job)
+        self._all_jobs.pop(job.key)
 
     def resume_job_execution(self, key):
         job = self.verify_key(key)
@@ -101,8 +102,8 @@ class JobManager:
         return Job.model_validate(_job)
 
     def verify_key(self, key) -> Job | None:
-        for job in self._all_jobs:
-            if job.key == key:
+        for k, job in self._all_jobs.items():
+            if k == key.lower():
                 return job
         return None
     

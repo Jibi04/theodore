@@ -3,6 +3,17 @@ from typing import Dict, Any
 from tzlocal import get_localzone
 
 
+def cal_runtime(*, target: Dict[str, Any], dow: int | None = None) -> float | None | datetime | tuple:
+    now = datetime.now(get_localzone())
+
+    if dow:
+        days_until = (dow - now.day + 7) % 7
+        print(days_until)
+        runtime = now + timedelta(days=days_until, **target)
+        return now.ctime(), runtime.ctime()
+
+    runtime = now + timedelta(**target)
+
 def calculate_runtime_as_timestamp(
         *,
         target: Dict[str, Any], 
@@ -38,3 +49,4 @@ def get_time_difference(t: float) -> float:
     return t - datetime.now(tz=get_localzone()).timestamp()
 
 
+print(cal_runtime(target={"minutes": 30, "hours": 4}, dow=5))

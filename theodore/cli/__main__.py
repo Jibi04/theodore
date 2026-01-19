@@ -11,6 +11,7 @@ from theodore.core.theme import cli_defaults
 from theodore.core.logger_setup import base_logger
 from theodore.managers.file_manager import FileManager
 from theodore.managers.tasks_manager import TaskManager
+from theodore.tests.schedule_cli import schedule
 
 
 # ======= Theme Import instantiation ========
@@ -41,13 +42,14 @@ def tests(ctx):
 task_manager.add_command(file_manager, name='file-manager')
 theodore.add_command(file_manager, name="file-manager")
 theodore.add_command(start_servers, name='serve')
-theodore.add_command(stop_servers, name='stop-serving')
+theodore.add_command(stop_servers, name='shutdown')
 theodore.add_command(organize, name='organize')
 theodore.add_command(tests, name="tests")
 theodore.add_command(task_manager, name="tasks")
 theodore.add_command(weather, name='weather')
 theodore.add_command(config, name="configs")
 theodore.add_command(downloads, name="download")
+theodore.add_command(schedule, name="schedule")
 
 if __name__ == "__main__":
     theodore()

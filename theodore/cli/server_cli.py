@@ -5,7 +5,7 @@ import struct
 import rich_click as click
 from theodore.cli.async_click import AsyncCommand
 from theodore.core.utils import user_info
-from theodore.managers.daemon_manager import Worker
+from theodore.tests.daemon_manager import Worker
 
 WORKER = Worker()
 
