@@ -1,8 +1,13 @@
 import click
+import re
+import traceback
 import rich_click as click
 from click_option_group import optgroup, RequiredAllOptionGroup
+from typing import Any
 from theodore.core.theme import console
+from theodore.core.utils import user_error, user_info
 from theodore.managers.file_manager import FileManager
+from theodore.core.file_helpers import archive_folder, extract_folder, resolve_path
 
 
 @click.group()
@@ -57,7 +62,7 @@ def undo(ctx):
     return
 
 @file_manager.command()
-@click.option('--source-dir', default=".", required=True)
+@click.option('--source-dir', "-d", default=".", required=True)
 @click.pass_context
 def organize(ctx, source_dir):
     """Automate file Movement, source directory defaults to current directory."""
@@ -78,3 +83,33 @@ def list(ctx, dir_name):
     table, _ = manager.get_files_table(files)
     console.print(table)
     return
+
+@file_manager.command()
+@click.option("--filepath", "-p", required=True)
+@click.option("--filename", "-n")
+@click.option("--format", type=click.Choice([".xz", ".gz", ".gz2", ".zst"]), default=".xz")
+@click.pass_context
+def compress(ctx, filepath, filename, format):
+    if not (path := resolve_path(filepath)).exists():
+        user_error(f"Path {filepath} could not be resolved.")
+        return
+    name = filename or path.stem
+    returncode = archive_folder(src=path, filename=name, format=".tar"+format)
+    user_info(f"{name} compressed") if returncode else user_error(f"{name} compression failed.")
+
+@file_manager.command()
+@click.option("--filepath", "-p", required=True)
+@click.option("--filename", "-n")
+@click.pass_context
+def extract(ctx, filepath, filename):
+    if not (path := resolve_path(filepath)).exists():
+        user_error(f"Path {filepath} could not be resolved.")
+        return
+    name = filename or path.stem
+    try:
+        returncode = extract_folder(src=path, filename=name)
+    except OSError:
+        user_error(traceback.format_exc())
+        return
+    user_info(f"{name} extracted") if returncode else user_error(f"{name} extraction failed.")
+

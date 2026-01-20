@@ -14,10 +14,10 @@ def clean_column_names(df: pd.DataFrame) -> pd.DataFrame:
         raise ValueError(f"Expected a Pandas DataFrame but got {type(df).__name__}")
     
     df.columns = (df.columns
-                  .str.replace(r"[^A-Za-z0-9_]", "", regex=True)
+                  .str.replace(r"[\s]+", "_")
                   .str.lower()
                   .str.strip()
-                  .str.replace(r"\s+", "_")
+                  .str.replace(r"[^A-Za-z0-9_]", "_", regex=True)
                 )
     return df
 
@@ -130,6 +130,7 @@ def transform_data(
     except (ValueError, TypeError):
         user_info(f"Unable to save to csv: {traceback.format_exc()}")
 
+    user_info(f"{filepath.name} Cleaned!")
     return [cleaned_records.to_dict(orient="records"), general, numeric]
 
 

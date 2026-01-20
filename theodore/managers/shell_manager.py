@@ -1,8 +1,11 @@
 import asyncio
 import os
+import re
 import time
 import numpy
 
+
+from enum import IntEnum
 from dotenv import load_dotenv, find_dotenv
 from pathlib import Path
 from pydantic import BaseModel, ValidationError
@@ -15,12 +18,46 @@ class ValidateArgs(BaseModel):
     drive: str | None
     drive_env_key: str | None
 
+
+class TaskID(IntEnum):
+    Git = 1
+    Alembic = 2
+    Extraction = 3
+    Compression = 4
+    Backup = 5
+
+
 class ShellManager:
     def __init__(self) -> None:
         file = find_dotenv()
         load_dotenv(file)
 
-    async def custom_shell_cmds(self, cmd):
+    def _extract_file_count(self, cmd, stdout, stderr):
+        combined_output = stdout + "\n" + stderr
+        workdone = 0
+
+        match cmd:
+            case "git":
+                count = re.search(r"(\d+)\s+files? changed", combined_output)
+                workdone = int(count.group(1)) if count else 0
+                task_id = TaskID.Git
+            case "rclone":
+                match = re.search(r"Transfered:\s(\d+)\s+/", combined_output)
+                workdone = int(match.group(1)) if match else 0
+                task_id = TaskID.Backup
+            case "alembic":
+                workdone = int(stdout.count("Running upgrade"))
+                task_id = TaskID.Alembic
+            case _:
+                workdone = 0
+                task_id = 0
+
+        error_weight = len(stderr.splitlines()) if stderr.strip() else 0
+        return task_id, workdone, error_weight
+
+        
+
+    async def custom_shell_cmd(self, cmd):
         if not isinstance(cmd, str):
             raise ValueError(f"Cannot understand non string commands. {cmd}")
         
@@ -28,10 +65,7 @@ class ShellManager:
             return NotImplemented
         
         _cmd = cmd.split(" ")
-        (returncode, stdout, stderr) = await subprocess(cmd=_cmd)
-        message = stdout or stderr
-        user_info(f"Return Code: {returncode}\n Message: {message}")
-        return returncode
+        return await self.runcommand(cmd=_cmd, cmd_for="custom")
 
     async def backup_files_rclone(self, path: str | Path, drive: str | None = None, drive_env_key: str | None = None):
         try:
@@ -49,52 +83,48 @@ class ShellManager:
             raise ValueError(f"Path {path} could not be resolved.")
         
         cmd = ["rclone", "copy", str(p), cloud_path]
-        (returncode, stdout, stderr) = await subprocess(cmd=cmd)
-        message = stdout or stderr
-        user_info(f"Return Code: {returncode}\n Message: {message}")
-        return returncode
+        return await self.runcommand(cmd=cmd, cmd_for="rclone")
 
     async def stage(self, path = "."):
         if not (p:=resolve_path(path)).exists():
             raise ValueError(f"Path {path} could not be resolved.")
         
         cmd = ["git", "add", p]
-        (returncode, stdout, stderr) = await subprocess(cmd=cmd)
-        message = stdout or stderr
-        user_info(f"Return Code: {returncode}\n Message: {message}")
-        return returncode
+        return await self.runcommand(cmd=cmd, cmd_for="git")
 
-    async def commit_git(self, message):
+    async def commit_git(self, message: str):
         cmd = ["git", "commit", "-m", message]
-        (returncode, stdout, stderr) = await subprocess(cmd=cmd)
-        message = stdout or stderr
-        user_info(f"Return Code: {returncode}\n Message: {message}")
-        return returncode
+        return await self.runcommand(cmd=cmd, cmd_for="git")
     
     async def alembic_upgrade(self):
         cmd = ["alembic", "upgrade", "head"]
-        (returncode, stdout, stderr) = await subprocess(cmd=cmd)
-        message = stdout or stderr
-        user_info(f"Return Code: {returncode}\n Message: {message}")
-        return returncode
+        return await self.runcommand(cmd=cmd, cmd_for="alembic")
 
-    async def alembic_migrate(self, commit_message):
+    async def alembic_migrate(self, commit_message: str):
         cmd = ["alembic", "revision" "--autogenerate", "-m", commit_message]
-        (returncode, stdout, stderr) = await subprocess(cmd=cmd)
-        message = stdout or stderr
-        user_info(f"Return Code: {returncode}\n Message: {message}")
-        return returncode
+        return await self.runcommand(cmd=cmd, cmd_for="alembic")
 
     async def alembic_downgrade(self):
         cmd = ["alembic", "downgrade", "head"]
+        return await self.runcommand(cmd=cmd, cmd_for="alembic")
+    
+    async def runcommand(self, cmd, cmd_for):
+        start = time.perf_counter()
         (returncode, stdout, stderr) = await subprocess(cmd=cmd)
-        message = stdout or stderr
-        user_info(f"Return Code: {returncode}\n Message: {message}")
+        duration = round(time.perf_counter() - start, 3)
+        (tid, workdone, errorweight) = self._extract_file_count(cmd=cmd_for, stdout=stdout, stderr=stderr)
+        vector_perf.internal(numpy.array(
+            [   
+                tid,
+                1 if returncode == 0 else 0, 
+                duration, 
+                workdone, 
+                errorweight
+            ]))
         return returncode
 
 
 async def subprocess(cmd):
-    start = time.perf_counter()
     process = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
@@ -102,18 +132,5 @@ async def subprocess(cmd):
     )
 
     stdout, stderr = await process.communicate()
-
-    success = process.returncode
-    end = time.perf_counter()
-    vector_perf.internal(
-        numpy.array(
-            [
-                1 if success else 0, 
-                end - start, 
-                len(stdout.decode()) 
-                if success else 
-                len(stderr.decode())
-            ])
-        )
-    return success, stdout.decode(), stderr.decode()
+    return process.returncode, stdout.decode(), stderr.decode()
 

@@ -7,9 +7,11 @@ from theodore.cli.file_cli import file_manager, organize
 from theodore.cli.schedule_cli import schedule
 from theodore.cli.server_cli import start_servers, stop_servers
 from theodore.cli.task_cli import task_manager
+from theodore.cli.shell_cli import shell, backup, add_git, upgrade_migration, migrate_db
 from theodore.cli.weather_cli import weather
 from theodore.core.theme import cli_defaults
 from theodore.core.logger_setup import base_logger
+from theodore.managers.file_manager import FileManager
 
 
 # ======= Theme Import instantiation ========
@@ -25,6 +27,7 @@ def theodore(ctx: click.Context, verbose):
 
     ctx.ensure_object(dict)
     ctx.obj["verbose"] = verbose
+    ctx.obj['file_manager'] = FileManager()
     base_logger.internal("Theodore Initialized")
 
 @click.group()
@@ -34,6 +37,11 @@ def tests(ctx):
 
 
 task_manager.add_command(file_manager, name='file-manager')
+theodore.add_command(backup, name="backup")
+theodore.add_command(add_git)
+theodore.add_command(upgrade_migration)
+theodore.add_command(migrate_db)
+theodore.add_command(shell, name="shell")
 theodore.add_command(file_manager, name="file-manager")
 theodore.add_command(start_servers, name='serve')
 theodore.add_command(stop_servers, name='shutdown')

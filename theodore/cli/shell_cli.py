@@ -1,0 +1,98 @@
+import click
+import traceback
+import asyncio
+
+from pydantic import ValidationError
+
+from theodore.core.utils import user_info, user_error
+from theodore.cli.async_click import AsyncCommand
+from theodore.managers.shell_manager import ShellManager
+
+SHELL_MANAGER = ShellManager()
+
+@click.group()
+def shell():
+    """Perform custom, git and alembic commands."""
+    pass
+
+@shell.command(cls=AsyncCommand)
+@click.option("--path", "-p", required=True)
+@click.option("--drive", "-dn", help="Rclone Drive name")
+@click.option("--drive-env-key", "-env-key", help="Key to env variable for drive name")
+@click.pass_context
+async def backup(ctx, path, **kwds):
+    """Backup files to cloud using rclone"""
+    try:
+        task = asyncio.create_task(SHELL_MANAGER.backup_files_rclone(path=path, **kwds))
+        user_info("Backup Initiated!")
+        returncode = task.result()
+        user_info(f"{path} backup") if returncode else user_error(f"{path} backup failed.")
+    except (ValueError, ValidationError, asyncio.CancelledError):
+        user_error(traceback.format_exc())
+
+@shell.command(cls=AsyncCommand, name="custom-cmd")
+@click.option("--cmd", "-c", required=True)
+@click.pass_context
+async def custom_cmd(ctx, cmd):
+    """Perform custom shell commands."""
+    try:
+        returncode = await SHELL_MANAGER.custom_shell_cmd(cmd=cmd)
+        user_info(f"Success") if returncode else user_error(f"Custome cmd failed.")
+    except (ValueError, ValidationError):
+        user_error(traceback.format_exc())
+
+@shell.command(cls=AsyncCommand, name="add-git")
+@click.pass_context
+async def add_git(ctx):
+    """Stage git files for commit"""
+    try:
+        returncode = await SHELL_MANAGER.stage()
+        user_info("Files Staged!") if returncode else user_error(f"File staging failed.")
+    except (ValueError, ValidationError):
+        user_error(traceback.format_exc())
+
+@shell.command(cls=AsyncCommand, name="add-commit")
+@click.option("--message", "-m", type=str, required=True)
+@click.pass_context
+async def add_commit(ctx, message):
+    """Commit staged git files"""
+    try:
+        returncode = await SHELL_MANAGER.commit_git(message=message)
+        user_info("Files commited!") if returncode else user_error(f"File commit failed.")
+    except (ValueError):
+        user_error(traceback.format_exc())
+
+
+@shell.command(cls=AsyncCommand, name="migrate-db")
+@click.option("--message", "-m", type=str, required=True)
+@click.pass_context
+async def migrate_db(ctx, message):
+    """generate revision for database migration"""
+    try:
+        returncode = await SHELL_MANAGER.alembic_migrate(commit_message=message)
+        user_info("Alembic Migration done.") if returncode else user_error(f"Alembic Migration failed.")
+    except (ValueError):
+        user_error(traceback.format_exc())
+
+
+@shell.command(cls=AsyncCommand, name="upgrade-migration")
+@click.option("--message", "-m", type=str, required=True)
+@click.pass_context
+async def upgrade_migration(ctx, message):
+    """Implement revision"""
+    try:
+        returncode = await SHELL_MANAGER.alembic_migrate(commit_message=message)
+        user_info("Alembic upgrade done.") if returncode else user_error(f"Alembic upgrade failed.")
+    except (ValueError):
+        user_error(traceback.format_exc())
+
+
+@shell.command(cls=AsyncCommand, name="upgrade-migration")
+@click.option("--message", "-m", type=str, required=True)
+@click.pass_context
+async def downgrade_migration(ctx, message):
+    try:
+        returncode = await SHELL_MANAGER.alembic_migrate(commit_message=message)
+        user_info("Alembic downgrade done.") if returncode else user_error(f"Alembic downgrade failed.")
+    except (ValueError):
+        user_error(traceback.format_exc())

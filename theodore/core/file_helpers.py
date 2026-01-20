@@ -2,17 +2,19 @@ import re
 import getpass
 import json
 import shutil
+import tarfile
 import time
+import traceback
 import threading
 import concurrent.futures
 
 from datetime import datetime
 from itertools import chain
-from tzlocal import get_localzone
 from pathlib import Path
-from typing import Tuple, Dict, Generator, List, Callable, Any, Iterable
+from tzlocal import get_localzone
+from typing import Tuple, Dict, Generator, List, Any, Iterable
 
-from theodore.core.logger_setup import base_logger
+from theodore.core.logger_setup import base_logger, error_logger
 from theodore.core.utils import JSON_DIR, user_error
 
 HOME = Path.home()
@@ -169,13 +171,39 @@ def organize(src_path: str | Path) -> None:
         dst = dst_map.get(path.suffix) or dst_map['unknown']
         dst.expanduser().mkdir(parents=True, exist_ok=True)
 
-        src_str, dst_str = resolve_entry(src=path, dst=dst)
-        move_entry(src=src_str, dst=dst_str)
-    
-        _src = resolve_path(src_path)
-        _dst = resolve_path(dst_str)
+        move_entry(src=path, dst=dst)
+        base_logger.internal(f"Moved {path.name} from {path.parent} to {dst.name}.")
 
-        base_logger.internal(f"Moved {_src.name} from {_src.parent} to {_dst.name}.")
+
+def archive_folder(src: str | Path, filename: str | None = None, format: str = ".tar.gz"):
+    if not (path:=resolve_path(src)).exists():
+        raise ValueError(f"Path {src} could not be resolved.")
+    
+    name = (filename or path.stem) + format
+    try:
+        with tarfile.open(name, 'w') as tar:
+            tar_info = tar.gettarinfo(path)
+
+            if path.is_dir(): tar.add(path)
+            elif path.is_file(): tar.addfile(tarinfo=tar_info)
+            base_logger.internal(tar_info)
+            return 1
+    except tarfile.CompressionError:
+        error_logger.info(traceback.format_exc())
+        return 0
+
+def extract_folder(src: str | Path, filename: str):
+    if not (path:=resolve_path(src)).exists():
+        raise ValueError(f"Path {path} could not be resolved.")
+    try:
+        with tarfile.open(filename, 'r') as tar:
+            tar_info = tar.gettarinfo(path)
+            tar.extractall(path)
+            base_logger.internal(tar_info)
+            return 1
+    except tarfile.ReadError:
+        error_logger.info(traceback.format_exc())
+        return 0
 
 
 def clean_user_search(name: str | Path) -> str:

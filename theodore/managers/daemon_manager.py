@@ -17,8 +17,8 @@ from watchdog.events import FileClosedEvent, FileSystemEventHandler, DirCreatedE
 from watchdog.observers import Observer
 
 from theodore.core.file_helpers import resolve_path, organize
-from theodore.core.logger_setup import base_logger, error_logger, vector_perf
-from theodore.core.utils import user_info, user_error
+from theodore.core.logger_setup import base_logger, error_logger, vector_perf, system_logs
+from theodore.core.utils import user_info, user_error, user_warning
 from theodore.core.time_converters import calculate_runtime_as_timestamp, get_time_difference, get_localzone
 from theodore.core.state import TheodoreState
 from theodore.core.etl_helpers import transform_data
@@ -87,17 +87,19 @@ class SytemMonitor:
 
         me = psutil.Process()
         # Start Observer
-        user_info("System Monitor running")
+        system_logs.info("System Monitor running")
         while not self._monitor_shutdown_event.is_set():
             try:
                 self.state_obj.cpu = me.cpu_percent(interval)
-                self.state_obj.memory = me.memory_percent()
-                self.state_obj.ram = me.memory_info().rss / 1024 / 1024
+                self.state_obj.memory = round(me.memory_percent("vms"), 3)
+                self.state_obj.ram = round(me.memory_info().rss / 1024 / 1024, 3)
                 self.state_obj.threads = me.num_threads()
                 self.state_obj.status = me.status()
                 self.state_obj.processName = me.name()
                 self.state_obj.processID = me.pid
                 self.state_obj.username = me.username()
+                system_logs.internal(f"CPU: {self.state_obj.cpu}% Process Name: {self.state_obj.processName} Memory Used: {self.state_obj.memory}% RAM: {self.state_obj.ram} MB STATUS: {self.state_obj.status} THREADS: {self.state_obj.threads} USER: {self.state_obj.username}"
+                                    )
                 self._monitor_shutdown_event.wait(interval)
             except (psutil.AccessDenied, psutil.NoSuchProcess):
                 raise
@@ -106,10 +108,10 @@ class SytemMonitor:
 
     def stop(self) -> None:
         if self._monitor_shutdown_event.is_set():
-            user_info("System Monitor is currently not running")
+            system_logs.info("System Monitor is currently not running")
             return
         self._monitor_shutdown_event.set()
-        user_info("System Monitor Stopped")
+        system_logs.info("System Monitor Stopped")
 
 
 class Dispatch:
@@ -620,25 +622,21 @@ class FileEventManager(FileSystemEventHandler):
         self.etl_handler = ETL()
         self._user = user
 
-    def on_created(self, event: DirCreatedEvent | FileCreatedEvent) -> None:
-        user_info(f"New Item detected '{self.parse_name(event.src_path)}'. Moving to {self.parse_name(self._target_folder)} for Processing. USER: {self._user}.")
-
     def on_moved(self, event: DirMovedEvent | FileMovedEvent) -> None:
-        user_info(f"{self.parse_name(event.src_path)} Moved to {event.dest_path}. USER: {self._user}")
+        user_info(f"{event.src_path} Moved to {event.dest_path}. USER: {self._user}")
 
     def on_closed(self, event: FileClosedEvent) -> None:
-
         if (path:=resolve_path(event.src_path)).is_dir():
             return
         
         if path.suffix == ".csv":
-            self.etl_handler.transform(path=path)
+            start = time.perf_counter()
+            success = self.etl_handler.transform(path=path)
+            end = time.perf_counter()
+            vector_perf.internal(numpy.array([1 if success else 0, end - start, ""]))
             return 
-        self._file_manager.organize_files(src=path.parent)
+        self._file_manager.move_dst_unknown(src=path)
     
     def on_deleted(self, event: DirDeletedEvent | FileDeletedEvent) -> None:
-        user_info(f"{self.parse_name(event.src_path)} Deleted. USER: {self._user}")
-
-    def parse_name(self, event_name: str | bytes) -> str:
-        return Path(str(event_name)).name
+        user_warning(f"{event.src_path} Deleted. USER: {self._user}")
    

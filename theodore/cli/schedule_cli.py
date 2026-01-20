@@ -62,6 +62,10 @@ async def schedule(
     ctx: click.Context,
     **kwargs
     ):
+    """
+    Automate ETL tasks, File downloads File organization etc with Scheduler.
+    Apscheduler API Integration comming soon.
+    """
     worker = Worker()
     package = {
         "cmd": "START-ETL",

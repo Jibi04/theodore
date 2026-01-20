@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 class TheodoreState(BaseModel):
     cpu: float | None = None
@@ -9,6 +9,13 @@ class TheodoreState(BaseModel):
     username: str | None = None
     processID: int | float | None = None
     processName: str | None = None
+
+
+    @field_validator('cpu')
+    @classmethod
+    def round_cpu(cls, v: float):
+        return round(v, 3)
+    
 
     numericProfile: dict | None = None
     generalProfile: dict | None = None
