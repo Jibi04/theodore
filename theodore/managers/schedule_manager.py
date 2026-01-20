@@ -1,9 +1,8 @@
 # set schedules plan trips, plan daily routines etc
 from enum import Enum
 from datetime import datetime, UTC
-from dataclasses import dataclass, Field
 from pydantic import BaseModel, Field, ConfigDict, ValidationError
-from typing import Coroutine, Any, Callable, Dict, List, Literal
+from typing import Any, Callable, Dict, List, Literal
 
 
 
@@ -18,10 +17,6 @@ class Status(Enum):
     active = "active"
     inactive = "in_active"
 
-
-class Trigger(Enum):
-    interval = "interval"
-    cron = "cron"
 
 
 class Job(BaseModel):

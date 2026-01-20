@@ -49,4 +49,3 @@ def get_time_difference(t: float) -> float:
     return t - datetime.now(tz=get_localzone()).timestamp()
 
 
-print(cal_runtime(target={"minutes": 30, "hours": 4}, dow=5))

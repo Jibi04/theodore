@@ -6,6 +6,7 @@ from pathlib import Path
 from pandas.errors import DtypeWarning, ParserError
 from typing import List, Any, Tuple, Dict, Literal, Hashable
 from theodore.core.utils import user_info
+from theodore.core.file_helpers import resolve_path
 
 
 def clean_column_names(df: pd.DataFrame) -> pd.DataFrame:
@@ -77,7 +78,7 @@ def transform_data(
         *,
         path: Path | str,
         date_cols: List[str] | None = None,
-        date_errors: Literal["coerce", "ignore", "raise", "RaiseCoerce"],
+        date_errors: Literal["coerce", "ignore", "raise", "RaiseCoerce"] | None = None,
         aware_datetime: bool = True,
         fillna: str | None = None,
         axis: int | None = None,
@@ -87,8 +88,7 @@ def transform_data(
     if not isinstance(path, (Path, str)):
         raise TypeError(f"path args '{path}' not of type str or path")
     
-    filepath = Path(path)
-    if not filepath.exists():
+    if not (filepath:=resolve_path(path)).exists():
         raise FileNotFoundError(f"File to transformed not existent, not a path string or has been moved {path}.")
     
     try:
@@ -101,6 +101,8 @@ def transform_data(
     df_cp = df.copy()
 
     if date_cols:
+        if date_errors is None:
+            raise ValueError("Date errors cannot be of Nonetype")
         for col in date_cols:
             try:
                     df_cp[col] = pd.to_datetime(df[col], errors=date_errors, utc=aware_datetime)
@@ -124,7 +126,7 @@ def transform_data(
 
     try:
         if save_to:
-            cleaned_records.to_csv(save_to)
+            cleaned_records.to_csv(f"{save_to}/{filepath.name}")
     except (ValueError, TypeError):
         user_info(f"Unable to save to csv: {traceback.format_exc()}")
 

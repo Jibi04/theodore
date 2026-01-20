@@ -60,7 +60,12 @@ def get_logger(name, log_file: str | None = None) -> logging.Logger:
     logger.addHandler(rich_handler)
 
     # ------------- File Logs ----------------
-    file_handler = RotatingFileHandler(FILE_PATH, encoding="utf-8", backupCount=3, maxBytes=2*1024*1024)
+    file_handler = RotatingFileHandler(
+        FILE_PATH, 
+        encoding="utf-8", 
+        backupCount=3, 
+        maxBytes=2*1024*1024
+        )
     file_handler.setFormatter(formatter)
     file_handler.setLevel(logging.DEBUG)  # INTERNAL logs included
     logger.addHandler(file_handler)
@@ -71,3 +76,5 @@ def get_logger(name, log_file: str | None = None) -> logging.Logger:
 
 base_logger = get_logger("theodore", "theodore.log")
 error_logger = get_logger("theodore.errors", "errors.log")
+vector_perf = get_logger("theodore.performance", "performance.log")
+system_logs = get_logger("theodore.monitor", "monitor.log")

@@ -7,6 +7,8 @@ from dotenv import load_dotenv, find_dotenv
 from pathlib import Path
 from pydantic import BaseModel, ValidationError
 from theodore.core.file_helpers import resolve_path
+from theodore.core.utils import user_info
+from theodore.core.logger_setup import vector_perf
 
 class ValidateArgs(BaseModel):
     path: str | Path
@@ -17,6 +19,19 @@ class ShellManager:
     def __init__(self) -> None:
         file = find_dotenv()
         load_dotenv(file)
+
+    async def custom_shell_cmds(self, cmd):
+        if not isinstance(cmd, str):
+            raise ValueError(f"Cannot understand non string commands. {cmd}")
+        
+        if "rm" in cmd.lower():
+            return NotImplemented
+        
+        _cmd = cmd.split(" ")
+        (returncode, stdout, stderr) = await subprocess(cmd=_cmd)
+        message = stdout or stderr
+        user_info(f"Return Code: {returncode}\n Message: {message}")
+        return returncode
 
     async def backup_files_rclone(self, path: str | Path, drive: str | None = None, drive_env_key: str | None = None):
         try:
@@ -34,30 +49,48 @@ class ShellManager:
             raise ValueError(f"Path {path} could not be resolved.")
         
         cmd = ["rclone", "copy", str(p), cloud_path]
-        response = await subprocess(cmd=cmd)
+        (returncode, stdout, stderr) = await subprocess(cmd=cmd)
+        message = stdout or stderr
+        user_info(f"Return Code: {returncode}\n Message: {message}")
+        return returncode
 
     async def stage(self, path = "."):
         if not (p:=resolve_path(path)).exists():
             raise ValueError(f"Path {path} could not be resolved.")
         
         cmd = ["git", "add", p]
-        response = await subprocess(cmd=cmd)
+        (returncode, stdout, stderr) = await subprocess(cmd=cmd)
+        message = stdout or stderr
+        user_info(f"Return Code: {returncode}\n Message: {message}")
+        return returncode
 
     async def commit_git(self, message):
         cmd = ["git", "commit", "-m", message]
-        response = await subprocess(cmd=cmd)
+        (returncode, stdout, stderr) = await subprocess(cmd=cmd)
+        message = stdout or stderr
+        user_info(f"Return Code: {returncode}\n Message: {message}")
+        return returncode
     
     async def alembic_upgrade(self):
         cmd = ["alembic", "upgrade", "head"]
-        response = await subprocess(cmd=cmd)
+        (returncode, stdout, stderr) = await subprocess(cmd=cmd)
+        message = stdout or stderr
+        user_info(f"Return Code: {returncode}\n Message: {message}")
+        return returncode
 
     async def alembic_migrate(self, commit_message):
         cmd = ["alembic", "revision" "--autogenerate", "-m", commit_message]
-        response = await subprocess(cmd=cmd)
+        (returncode, stdout, stderr) = await subprocess(cmd=cmd)
+        message = stdout or stderr
+        user_info(f"Return Code: {returncode}\n Message: {message}")
+        return returncode
 
     async def alembic_downgrade(self):
         cmd = ["alembic", "downgrade", "head"]
-        response = await subprocess(cmd=cmd)
+        (returncode, stdout, stderr) = await subprocess(cmd=cmd)
+        message = stdout or stderr
+        user_info(f"Return Code: {returncode}\n Message: {message}")
+        return returncode
 
 
 async def subprocess(cmd):
@@ -72,5 +105,15 @@ async def subprocess(cmd):
 
     success = process.returncode
     end = time.perf_counter()
-    performance_vector = numpy.array([1 if success else 0, end - start, len(stdout.decode()) if success else len(stderr.decode())])
+    vector_perf.internal(
+        numpy.array(
+            [
+                1 if success else 0, 
+                end - start, 
+                len(stdout.decode()) 
+                if success else 
+                len(stderr.decode())
+            ])
+        )
+    return success, stdout.decode(), stderr.decode()
 

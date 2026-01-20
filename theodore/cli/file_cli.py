@@ -1,8 +1,6 @@
 import click
-import time
 import rich_click as click
 from click_option_group import optgroup, RequiredAllOptionGroup
-from theodore.core.utils import base_logger, user_error
 from theodore.core.theme import console
 from theodore.managers.file_manager import FileManager
 
@@ -11,6 +9,8 @@ from theodore.managers.file_manager import FileManager
 @click.pass_context
 def file_manager(ctx):
     """Move, copy, delete and organize files and folders"""
+    ctx.obj['file_manager'] = FileManager()
+
 
 @file_manager.command()
 @optgroup.group(name='default args', cls=RequiredAllOptionGroup)

@@ -2,16 +2,14 @@ import click
 import rich_click as click
 
 from theodore.cli.config_cli import config
+from theodore.cli.download_cli import downloads
 from theodore.cli.file_cli import file_manager, organize
+from theodore.cli.schedule_cli import schedule
+from theodore.cli.server_cli import start_servers, stop_servers
 from theodore.cli.task_cli import task_manager
 from theodore.cli.weather_cli import weather
-from theodore.cli.download_cli import downloads
-from theodore.cli.server_cli import start_servers, stop_servers
 from theodore.core.theme import cli_defaults
 from theodore.core.logger_setup import base_logger
-from theodore.managers.file_manager import FileManager
-from theodore.managers.tasks_manager import TaskManager
-from theodore.tests.schedule_cli import schedule
 
 
 # ======= Theme Import instantiation ========
@@ -27,9 +25,6 @@ def theodore(ctx: click.Context, verbose):
 
     ctx.ensure_object(dict)
     ctx.obj["verbose"] = verbose
-    ctx.obj['task_manager'] = TaskManager()
-    ctx.obj['file_manager'] = FileManager()
-
     base_logger.internal("Theodore Initialized")
 
 @click.group()
@@ -37,7 +32,6 @@ def theodore(ctx: click.Context, verbose):
 def tests(ctx):
     """Test out CLI commands"""
 
-    
 
 task_manager.add_command(file_manager, name='file-manager')
 theodore.add_command(file_manager, name="file-manager")

@@ -7,6 +7,7 @@ from click_option_group import optgroup, RequiredMutuallyExclusiveOptionGroup, R
 from sqlalchemy.exc import SQLAlchemyError
 from theodore.core.utils import user_error, user_success, user_warning, user_info, get_task_table, base_logger
 from theodore.core.theme import console
+from theodore.managers.tasks_manager import TaskManager
  
 
 
@@ -14,6 +15,7 @@ from theodore.core.theme import console
 @click.pass_context             
 def task_manager(ctx):
     """Manage to-dos"""
+    ctx.obj['task_manager'] = TaskManager()
 
 @task_manager.command(cls=AsyncCommand)
 @click.option('--title', '-t', type=str, help="task title", required=True)

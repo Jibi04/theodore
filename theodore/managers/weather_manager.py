@@ -11,8 +11,8 @@ from theodore.models.configs import ConfigTable
 from theodore.models.weather import Current, Alerts, Forecasts
 from sqlalchemy import select, or_
 from theodore.managers.configs_manager import ConfigManager
-from httpx import ConnectTimeout, ReadTimeout, ReadError, DecodingError
-from typing import Type, TypeVar, Dict
+from httpx import ConnectTimeout, ReadTimeout, ReadError
+from typing import Type, TypeVar
 
 DOTENV_PATH = find_dotenv()
 load_dotenv(DOTENV_PATH)
@@ -102,9 +102,6 @@ class WeatherManager:
                     time.sleep(1)
                 except httpx.HTTPError:
                     continue
-                except DecodingError:
-                        base_logger.debug(f"Recieved non json-Response from Serve. {str(e)}")
-                        return send_message(False, message=f"Recieved non json-Response from server {response.status_code}")
                 except Exception as e:
                     user_error(f'{type(e).__name__} error. Aborting...')
                     return send_message(False, message=f'A  error occurred')
