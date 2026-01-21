@@ -1,14 +1,17 @@
 import click
 import rich_click as click
 
+import concurrent.futures
+
 from theodore.cli.config_cli import config
 from theodore.cli.download_cli import downloads
 from theodore.cli.file_cli import file_manager, organize
 from theodore.cli.schedule_cli import schedule
 from theodore.cli.server_cli import start_servers, stop_servers
 from theodore.cli.task_cli import task_manager
-from theodore.cli.shell_cli import shell, backup, add_git, upgrade_migration, migrate_db
+from theodore.cli.shell_cli import shell, backup, add_git, add_commit, upgrade_migration, migrate_db
 from theodore.cli.weather_cli import weather
+from theodore.cli.dash_cli import dash
 from theodore.core.theme import cli_defaults
 from theodore.core.logger_setup import base_logger
 from theodore.managers.file_manager import FileManager
@@ -35,23 +38,25 @@ def theodore(ctx: click.Context, verbose):
 def tests(ctx):
     """Test out CLI commands"""
 
-
 task_manager.add_command(file_manager, name='file-manager')
-theodore.add_command(backup, name="backup")
-theodore.add_command(add_git)
-theodore.add_command(upgrade_migration)
-theodore.add_command(migrate_db)
-theodore.add_command(shell, name="shell")
-theodore.add_command(file_manager, name="file-manager")
-theodore.add_command(start_servers, name='serve')
-theodore.add_command(stop_servers, name='shutdown')
-theodore.add_command(organize, name='organize')
-theodore.add_command(tests, name="tests")
-theodore.add_command(task_manager, name="tasks")
-theodore.add_command(weather, name='weather')
-theodore.add_command(config, name="configs")
-theodore.add_command(downloads, name="download")
-theodore.add_command(schedule, name="schedule")
+theodore.add_command(dash, "dash")
+theodore.add_command(shell, "shell")
+theodore.add_command(file_manager, "manager")
+theodore.add_command(start_servers, 'serve')
+theodore.add_command(stop_servers, 'shutdown')
+theodore.add_command(organize, 'organize')
+theodore.add_command(tests, "tests")
+theodore.add_command(task_manager, "tasks")
+theodore.add_command(weather, 'weather')
+theodore.add_command(config, "configs")
+theodore.add_command(downloads, "download")
+theodore.add_command(schedule, "schedule")
+theodore.add_command(backup, "backup")
+theodore.add_command(add_git, "add")
+theodore.add_command(add_commit, "commit")
+theodore.add_command(upgrade_migration, "upgrade")
+theodore.add_command(migrate_db, "migrate")
+
 
 if __name__ == "__main__":
     theodore()

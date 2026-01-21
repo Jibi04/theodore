@@ -1,4 +1,5 @@
 import click
+import rich_click as click
 import traceback
 import asyncio
 
@@ -17,7 +18,7 @@ def shell():
 
 @shell.command(cls=AsyncCommand)
 @click.option("--path", "-p", required=True)
-@click.option("--drive", "-dn", help="Rclone Drive name")
+@click.option("--drive", "-d", help="Rclone Drive name")
 @click.option("--drive-env-key", "-env-key", help="Key to env variable for drive name")
 @click.pass_context
 async def backup(ctx, path, **kwds):

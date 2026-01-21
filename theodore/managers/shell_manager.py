@@ -132,7 +132,7 @@ async def subprocess(cmd):
         *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
-        cwd=Path(__file__).parent
+        cwd=Path(__file__).parent.parent.parent
     )
 
     stdout, stderr = await process.communicate()
