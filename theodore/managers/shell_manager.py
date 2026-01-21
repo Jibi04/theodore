@@ -9,6 +9,9 @@ from enum import IntEnum
 from dotenv import load_dotenv, find_dotenv
 from pathlib import Path
 from pydantic import BaseModel, ValidationError
+from rich.layout import Layout
+from rich.live import Live
+from rich.progress import Progress, BarColumn, TextColumn, ProgressColumn
 from theodore.core.file_helpers import resolve_path
 from theodore.core.utils import user_info
 from theodore.core.logger_setup import vector_perf
@@ -82,8 +85,8 @@ class ShellManager:
         if not (p:=resolve_path(path)).exists():
             raise ValueError(f"Path {path} could not be resolved.")
         
-        cmd = ["rclone", "copy", str(p), cloud_path]
-        return await self.runcommand(cmd=cmd, cmd_for="rclone")
+        cmd = ["rclone", "copy", str(p), cloud_path, "--progress", "--stats", "1s"]
+        return await subprocess_with_progress(cmd=cmd)
 
     async def stage(self, path = "."):
         if not (p:=resolve_path(path)).exists():
@@ -121,7 +124,7 @@ class ShellManager:
                 workdone, 
                 errorweight
             ]))
-        return returncode
+        return 1 if returncode == 0 else 0
 
 
 async def subprocess(cmd):
@@ -129,8 +132,65 @@ async def subprocess(cmd):
         *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        cwd=Path(__file__).parent
     )
 
     stdout, stderr = await process.communicate()
     return process.returncode, stdout.decode(), stderr.decode()
 
+async def subprocess_with_progress(cmd, description="Processing..."):
+    progress = Progress(
+        TextColumn("[bold blue]{task.description}"),
+        BarColumn(bar_width=None),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%")
+    )
+
+    backup_task = progress.add_task(description=description, total=100)
+    layout = Layout()
+    layout.update(progress)
+
+    with Live(layout, refresh_per_second=5):
+        start = time.perf_counter()
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+
+        errors_decoded = []
+        while True:
+            line = await process.stderr.readline() + await process.stdout.readline()
+            if not line:
+                break
+
+            decoded_line = line.decode().strip()
+            errors_decoded.append(decoded_line)
+
+            match = re.search(r"Transferred:\s+(\d+)%,\s", decoded_line)
+            print(match)
+            if match:
+                progress.update(backup_task, completed=int(match.group(1)))
+
+        await process.wait()
+
+        stop = time.perf_counter()
+        returncode = process.returncode
+
+        stderr = " ".join(errors_decoded)
+
+        search_string = stderr + "\n" + process.stdout.decode()
+
+        workdone = 0
+        match = re.search(r'Transferred:\s+(\d+)\s+/', search_string)
+        if match:
+            workdone = match.group(1)
+
+        vector_perf.internal(numpy.array(
+            [TaskID.Backup, 
+             1 if returncode == 0 else 0, 
+             stop - start,
+             workdone,
+             len(stderr.splitlines()) if stderr else 0
+            ]
+        ))
+        return returncode

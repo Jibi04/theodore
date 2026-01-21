@@ -8,19 +8,21 @@ import struct
 import time
 import threading
 import traceback
+import tempfile
+
 from asyncio.exceptions import IncompleteReadError
 from datetime import datetime as dt, UTC
 from pathlib import Path
 import time
 from typing import Mapping, Any, Callable, Dict, Tuple, List, Literal
-from watchdog.events import FileClosedEvent, FileSystemEventHandler, DirCreatedEvent, FileCreatedEvent, DirMovedEvent, FileMovedEvent, DirDeletedEvent, FileDeletedEvent
+from watchdog.events import FileClosedEvent, FileSystemEventHandler, DirMovedEvent, FileMovedEvent, DirDeletedEvent, FileDeletedEvent
 from watchdog.observers import Observer
 
 from theodore.core.file_helpers import resolve_path, organize
-from theodore.core.logger_setup import base_logger, error_logger, vector_perf, system_logs
+from theodore.core.logger_setup import base_logger, error_logger, vector_perf, system_logs, sys_vector_logs
 from theodore.core.utils import user_info, user_error, user_warning
 from theodore.core.time_converters import calculate_runtime_as_timestamp, get_time_difference, get_localzone
-from theodore.core.state import TheodoreState
+from theodore.core.state import MonitorState
 from theodore.core.etl_helpers import transform_data
 from theodore.managers.file_manager import FileManager
 from theodore.managers.schedule_manager import ValidationError, InvalidScheduleTimeError, Job, Status
@@ -28,8 +30,12 @@ from theodore.managers.download_manager import DownloadManager
 from theodore.managers.schedule_manager import JobManager
 
 
-STATE_OBJ = TheodoreState()
 DEFAULT = Path(__file__).parent.parent/"data"/"datasets"
+TEMP_DIR = tempfile.gettempdir()
+
+npy_file = Path(f"{TEMP_DIR}/sys_vector.npy")
+server_state_file = Path(f"{TEMP_DIR}/server_state.lock")
+
 DEFAULT.mkdir(parents=True, exist_ok=True)
 
 class Signal:
@@ -48,7 +54,7 @@ class Signal:
         )
 
         await self._signal_shutdown_event.wait()
-        
+
         self._server.close()
         # await self._server.wait_closed()
         user_info(
@@ -60,9 +66,7 @@ class Signal:
     def stop(self):
         self._signal_shutdown_event.set()
 
-
 class ETL:
-
     def transform(
         self,
         path: Path | str,
@@ -70,48 +74,9 @@ class ETL:
         **kwds
         ):
 
-        df, general_profile, numeric_profile = transform_data(path=path, save_to=save_to, **kwds)
+        (_, ETL.generalProfile, ETL.numericProfile) = transform_data(path=path, save_to=save_to, **kwds)
 
-        STATE_OBJ.generalProfile = general_profile
-        STATE_OBJ.numericProfile = numeric_profile
         return 1
-
-
-class SytemMonitor:
-    def __init__(self, cpu_threshold: float = 25.0):
-        self._monitor_shutdown_event = threading.Event()
-        self.log_handler = LogsHandler()
-        self.state_obj = STATE_OBJ
-
-    def start(self, interval=35) -> None:
-
-        me = psutil.Process()
-        # Start Observer
-        system_logs.info("System Monitor running")
-        while not self._monitor_shutdown_event.is_set():
-            try:
-                self.state_obj.cpu = me.cpu_percent(interval)
-                self.state_obj.memory = round(me.memory_percent("vms"), 3)
-                self.state_obj.ram = round(me.memory_info().rss / 1024 / 1024, 3)
-                self.state_obj.threads = me.num_threads()
-                self.state_obj.status = me.status()
-                self.state_obj.processName = me.name()
-                self.state_obj.processID = me.pid
-                self.state_obj.username = me.username()
-                system_logs.internal(f"CPU: {self.state_obj.cpu}% Process Name: {self.state_obj.processName} Memory Used: {self.state_obj.memory}% RAM: {self.state_obj.ram} MB STATUS: {self.state_obj.status} THREADS: {self.state_obj.threads} USER: {self.state_obj.username}"
-                                    )
-                self._monitor_shutdown_event.wait(interval)
-            except (psutil.AccessDenied, psutil.NoSuchProcess):
-                raise
-            except KeyboardInterrupt:
-                raise
-
-    def stop(self) -> None:
-        if self._monitor_shutdown_event.is_set():
-            system_logs.info("System Monitor is currently not running")
-            return
-        self._monitor_shutdown_event.set()
-        system_logs.info("System Monitor Stopped")
 
 
 class Dispatch:
@@ -130,9 +95,9 @@ class Dispatch:
     def _run(self, task_name, func, func_kwargs):
         task = asyncio.create_task(
             self.supervisor.supervise(
-                func=func, 
+                func=func,
                 func_kwargs=func_kwargs
-            ), 
+            ),
             name=task_name
         )
 
@@ -145,7 +110,6 @@ class Dispatch:
             task.cancel()
         return await asyncio.gather(*self.supervisor.tasks, return_exceptions=True)
 
-
 class Scheduler:
     def __init__(self):
         self._running_jobs: Dict[str, Job] = {}
@@ -157,10 +121,10 @@ class Scheduler:
         self.__sleep_event = asyncio.Event()
 
     def new_job(
-            self, 
+            self,
             *,
             key: Any,
-            func: Callable[..., None], 
+            func: Callable[..., None],
             func_args: Dict[Any, Any] | None = None,
             trigger: Literal["cron", "interval"],
             seconds: float | str| None = "*",
@@ -180,7 +144,7 @@ class Scheduler:
         for k, val in time_blueprint.items():
             if val != "*" and val is not None:
                 runtime_registry[k] = val
-        
+
         runtime = calculate_runtime_as_timestamp(target=runtime_registry, dow=dow)
         if runtime is None:
             user_error(f"Invalid time Args. {json.dumps(runtime_registry, indent=2)}")
@@ -211,17 +175,17 @@ class Scheduler:
             if not self._heaper.heap:
                 sleep_task = asyncio.create_task(self.__sleep_event.wait())
                 shutdown_task = asyncio.create_task(self.__scheduler_shutdown_event.wait())
-                
+
                 done, pending = await asyncio.wait(
                     [sleep_task, shutdown_task],
                     return_when=asyncio.FIRST_COMPLETED
                 )
                 # cleanup
-                for t in pending: t.cancel() 
+                for t in pending: t.cancel()
 
                 self.__sleep_event.clear()
                 if self.__scheduler_shutdown_event.is_set(): break
-                
+
                 if not self._heaper.heap: continue
 
             runtime, key = self._heaper.peek_first()
@@ -231,7 +195,7 @@ class Scheduler:
             if diff > 0:
                 sleep_task = asyncio.create_task(self.__sleep_event.wait())
                 shutdown_task = asyncio.create_task(self.__scheduler_shutdown_event.wait())
-                
+
                 # Race the clock vs the signals
                 done, pending = await asyncio.wait(
                     [sleep_task, shutdown_task],
@@ -240,9 +204,9 @@ class Scheduler:
                 )
                 for t in pending: t.cancel() # Clean up
                 self.__sleep_event.clear()
-                
+
                 if self.__scheduler_shutdown_event.is_set(): break
-                if sleep_task in done: continue 
+                if sleep_task in done: continue
 
             # If we reach here, the timeout expired or diff was 0: TIME TO RUN
             job = self.__in_active_jobs.get(key)
@@ -254,19 +218,19 @@ class Scheduler:
 
     def start_job(self, job: Job):
         next_runtime = calculate_runtime_as_timestamp(
-                target=job.runtime_registry, 
+                target=job.runtime_registry,
                 dow=job.dow
                 )
-        
+
         if next_runtime is None:
             raise InvalidScheduleTimeError(f"Unable to understand job time parameters '{job.dow}'")
-        
+
         if job.trigger == "cron":
             job.next_runtime = next_runtime
             self._heaper.add_to_heap(job)
             self.__sleep_event.set()
-            
-        
+
+
         coro_func = job.func
         name = f"Sheduler"
 
@@ -284,13 +248,12 @@ class Scheduler:
                 func=coro_func,
                 func_kwargs=coro_func_args
             )
-        
+
         self._running_jobs[job.key] = job
 
     def stop(self):
         self.__scheduler_shutdown_event.set()
-            
-    
+
 class Heaper:
     def __init__(self):
         self.heap: List[Tuple[float, Any]] = list()
@@ -304,16 +267,15 @@ class Heaper:
 
     def peek_first(self):
         return self.heap[0]
-    
+
     def get_first(self):
         return heapq.heappop(self.heap)
-    
+
     def update_heap(self, runtime: float, key: Any):
         heapq.heappushpop(self.heap, (runtime, key))
 
     def remove(self):
         heapq.heappop(self.heap)
-
 
 class Supervisor:
 
@@ -358,12 +320,11 @@ class Supervisor:
         except Exception as e:
             raise
 
-
 class LogsHandler:
-        
+
     def format_error(self) -> str:
         return traceback.format_exc()
-    
+
     def inform_error_logger(self, task_name, error_stack, reason, status: str = "Cancelled"):
         error_logger.internal(
                 f"""
@@ -373,7 +334,7 @@ Reason: {reason}
 Error stack: {error_stack}
                 """
             )
-        
+
     def inform_base_logger(self, task_name: str, task_response: Any, status):
         base_logger.internal(
         f"""
@@ -381,14 +342,13 @@ Task Name: {task_name}
 status: {status}
 Task response: {task_response}
                 """)
-        
 
 class FileEventHandler:
     def __init__(self, observer_path: str, target_path):
         if not Path(observer_path).expanduser().exists():
             user_info(f"FileHandler: {observer_path} doesn't exist!")
             return
-        
+
         self._user = getpass.getuser()
         self._watcher_shutdown_event = threading.Event()
         self._observer_target = Path(observer_path).expanduser()
@@ -411,13 +371,37 @@ class FileEventHandler:
     def stop(self):
         self._watcher_shutdown_event.set()
 
+class SystemMonitor:
+    def __init__(self):
+        self._monitor_shutdown_event = threading.Event()
+        self.log_handler = LogsHandler()
+
+    def start(self, interval=15) -> None:
+        # Start Observer
+        system_logs.info("System Monitor running")
+        while not self._monitor_shutdown_event.is_set():
+            try:
+                get_current_metrics(interval)
+                self._monitor_shutdown_event.wait(interval)
+            except (psutil.AccessDenied, psutil.NoSuchProcess):
+                raise
+            except KeyboardInterrupt:
+                raise
+
+    def stop(self) -> None:
+        if self._monitor_shutdown_event.is_set():
+            system_logs.info("System Monitor is currently not running")
+            return
+        self._monitor_shutdown_event.set()
+        system_logs.info("System Monitor Stopped")
+
 
 class Worker:
     def __init__(self):
         self.__signal = Signal(client_cb=self.handler)
         self.__dispatch = Dispatch()
         self.__scheduler = Scheduler()
-        self.__monitor = SytemMonitor()
+        self.__monitor = SystemMonitor()
         self.__log_handler = LogsHandler()
         self.__file_event_handler = FileEventHandler(observer_path="~/Downloads", target_path="Theodore_etl")
         self.__downloader = DownloadManager()
@@ -432,35 +416,36 @@ class Worker:
         }
 
     async def start_processes(self) -> None:
-        # loop = asyncio.get_running_loop()
-        # loop.add_signal_handler(signal.SIGINT, self.stop_processes)
-        # loop.add_signal_handler(signal.SIGTERM, self.stop_processes)
-        asyncio.create_task(
-            asyncio.to_thread(
-                self.__monitor.start, 
-                3
-            ),
-            name="system-monitor"
-        )
-
-        asyncio.create_task(
-            asyncio.to_thread(
-                self.__file_event_handler.start
-            ),
-            name="file-event-handler"
-        )
-
-        asyncio.create_task(
-            self.__scheduler.start(),
-            name="Scheduler"
-        )
-
-        self.signal_task = asyncio.create_task(
-            self.__signal.start(),
-            name="unix-server"
+        try:
+            asyncio.create_task(
+                asyncio.to_thread(
+                    self.__monitor.start,
+                    3
+                ),
+                name="system-monitor"
             )
-        
-        await self._worker_shutdown_event.wait()
+
+            asyncio.create_task(
+                asyncio.to_thread(
+                    self.__file_event_handler.start
+                ),
+                name="file-event-handler"
+            )
+
+            asyncio.create_task(
+                self.__scheduler.start(),
+                name="Scheduler"
+            )
+
+            self.signal_task = asyncio.create_task(
+                self.__signal.start(),
+                name="unix-server"
+                )
+
+            server_state_file.write_text("running")
+            await self._worker_shutdown_event.wait()
+        finally:
+            server_state_file.unlink(missing_ok=True)
 
     async def stop_processes(self) -> None:
 
@@ -474,8 +459,9 @@ class Worker:
         await self.signal_task
 
         # free blocking start-processes method
+        server_state_file.unlink()
         self._worker_shutdown_event.set()
-       
+
     async def __parse_message(self, reader: asyncio.StreamReader) -> bytes | None:
         try:
             header = await reader.readexactly(4)
@@ -485,12 +471,12 @@ class Worker:
             if size > 1000_000_000:
                 user_info("Reader: message too large")
                 return None
-            
+
             payload = await reader.readexactly(size)
             return payload
         except IncompleteReadError as e:
             if not e.partial: # no new command comming
-                return None 
+                return None
             raise
 
     async def handler(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
@@ -499,35 +485,35 @@ class Worker:
             # wait for a minute after connection creation if no message close.
             try:
                 message_bytes = await asyncio.wait_for(
-                    self.__parse_message(reader), 
+                    self.__parse_message(reader),
                     timeout=60
                 )
             except TimeoutError:
                 return
-            
+
             if message_bytes is None:
                 writer.write(
                     "Reader: Invalid Message format".encode()
                 )
                 await writer.drain()
                 return
-            
+
             try:
                 message = json.loads(message_bytes)
             except json.JSONDecodeError:
                 writer.write(b"Invalid Json")
                 await writer.drain()
                 return
-            
+
             cmd = message.get("cmd", None)
-            args = message.get("file_args") 
-            
+            args = message.get("file_args")
+
             cmd_register = self.__cmd_registry.get(cmd, None)
             if cmd_register is None:
                 writer.write(f"Reader: unknown command '{cmd}'".encode())
                 await writer.drain()
-                return 
-            
+                return
+
             await self.process_cmd(cmd_register, file_args=args)
             writer.write(f"Worker: {cmd} Initiated".encode())
             await writer.drain()
@@ -562,7 +548,7 @@ class Worker:
         except (IncompleteReadError, InterruptedError, asyncio.CancelledError):
             user_info("A connection error occurred whilst parsing command check logs for more details.")
             self.__log_handler.inform_error_logger(
-                task_name="Messenger", 
+                task_name="Messenger",
                 reason="Connection Interupted",
                 error_stack=self.__log_handler.format_error(),
                 status="Signal Not sent!"
@@ -570,7 +556,7 @@ class Worker:
         except (BrokenPipeError, OSError):
             user_info("A connection error occurred whilst parsing command check logs for more details.")
             self.__log_handler.inform_error_logger(
-                task_name="Messenger", 
+                task_name="Messenger",
                 reason="BrokenPipe",
                 error_stack=self.__log_handler.format_error(),
                 status="Signal Not sent!"
@@ -578,7 +564,7 @@ class Worker:
         except Exception as e:
             user_info("An error Occurred whilst parsing command check logs for more details.")
             self.__log_handler.inform_error_logger(
-                task_name="Messenger", 
+                task_name="Messenger",
                 reason=type(e).__name__,
                 error_stack=self.__log_handler.format_error(),
                 status="Signal Not sent!"
@@ -587,7 +573,7 @@ class Worker:
             if writer and not writer.is_closing():
                 writer.close()
                 await writer.wait_closed()
-        
+
     async def process_cmd(self, cmd_dict: Mapping[str, str], file_args):
         # Kill-switch for all tasks
         basename = cmd_dict.get("basename")
@@ -610,13 +596,9 @@ class Worker:
         self.__dispatch.dispatch_one(basename, func, file_args)
         return
 
-
-
-
-
 class FileEventManager(FileSystemEventHandler):
     def __init__(self, user: str, target_folder: str = ""):
-        
+
         self._target_folder = target_folder
         self._file_manager = FileManager()
         self.etl_handler = ETL()
@@ -628,15 +610,41 @@ class FileEventManager(FileSystemEventHandler):
     def on_closed(self, event: FileClosedEvent) -> None:
         if (path:=resolve_path(event.src_path)).is_dir():
             return
-        
+
         if path.suffix == ".csv":
             start = time.perf_counter()
             success = self.etl_handler.transform(path=path)
             end = time.perf_counter()
             vector_perf.internal(numpy.array([1 if success else 0, end - start, ""]))
-            return 
+            return
         self._file_manager.move_dst_unknown(src=path)
-    
+
     def on_deleted(self, event: DirDeletedEvent | FileDeletedEvent) -> None:
         user_warning(f"{event.src_path} Deleted. USER: {self._user}")
-   
+
+def get_current_metrics(interval):
+    me = psutil.Process()
+
+    cpu = psutil.cpu_percent(interval)
+    disk = psutil.disk_usage('/').percent
+
+    net = psutil.net_io_counters()
+
+    sent = round(net.bytes_sent/(1024**2), )
+    recv = round(net.bytes_recv/(1024**2), 2)
+
+    ram = round(me.memory_info().rss/1024**2, 2)
+    threads = me.num_threads()
+
+    dirs = Path(__file__).parent.parent/"data"/"vectors"
+    dirs.mkdir(parents=True, exist_ok=True)
+
+    csv_filepath = dirs/"sys_vectors.csv"
+
+    vectors = [cpu, ram, disk, sent, recv, threads]
+    numpy.save(file=npy_file, arr=numpy.array(vectors))
+    
+    with csv_filepath.open('a') as f:
+        f.write(f"{cpu},{ram},{disk},{sent},{recv},{threads}\n")
+
+    return
