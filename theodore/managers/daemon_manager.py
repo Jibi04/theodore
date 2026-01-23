@@ -35,6 +35,7 @@ TEMP_DIR = tempfile.gettempdir()
 
 npy_file = Path(f"{TEMP_DIR}/sys_vector.npy")
 server_state_file = Path(f"{TEMP_DIR}/server_state.lock")
+new_df = Path(f"{TEMP_DIR}/transformed_data.json")
 
 DEFAULT.mkdir(parents=True, exist_ok=True)
 
@@ -74,8 +75,13 @@ class ETL:
         **kwds
         ):
 
-        (_, ETL.generalProfile, ETL.numericProfile) = transform_data(path=path, save_to=save_to, **kwds)
+        general, numeric = transform_data(path=path, save_to=save_to, **kwds)
 
+        stats = {
+            "general": general,
+            "numeric": numeric
+        }
+        new_df.write_text(json.dumps(stats, indent=2))
         return 1
 
 
@@ -445,22 +451,33 @@ class Worker:
             server_state_file.write_text("running")
             await self._worker_shutdown_event.wait()
         finally:
+            # cleanup
+
+            new_df.unlink(missing_ok=True)
+            npy_file.unlink(missing_ok=True)
             server_state_file.unlink(missing_ok=True)
 
     async def stop_processes(self) -> None:
+        try:
 
-        await self.__dispatch.shutdown()
-        self.__monitor.stop()
-        self.__file_event_handler.stop()
-        self.__scheduler.stop()
-        self.__signal.stop()
+            await self.__dispatch.shutdown()
+            self.__monitor.stop()
+            self.__file_event_handler.stop()
+            self.__scheduler.stop()
+            self.__signal.stop()
 
-        # Await server shutdown
-        await self.signal_task
+            # Await server shutdown
+            await self.signal_task
 
-        # free blocking start-processes method
-        server_state_file.unlink()
-        self._worker_shutdown_event.set()
+            # free blocking start-processes method
+            
+            self._worker_shutdown_event.set()
+        finally:
+            # cleanup
+            
+            server_state_file.unlink(missing_ok=True)
+            npy_file.unlink(missing_ok=True)
+            new_df.unlink(missing_ok=True)
 
     async def __parse_message(self, reader: asyncio.StreamReader) -> bytes | None:
         try:
@@ -611,6 +628,7 @@ class FileEventManager(FileSystemEventHandler):
         if (path:=resolve_path(event.src_path)).is_dir():
             return
 
+        user_info(f"New {resolve_path(event.src_path).suffix} file Detected Processing...\n {event.src_path}")
         if path.suffix == ".csv":
             start = time.perf_counter()
             success = self.etl_handler.transform(path=path)

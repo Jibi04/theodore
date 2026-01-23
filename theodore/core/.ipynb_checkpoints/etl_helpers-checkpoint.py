@@ -15,7 +15,7 @@ class NumpySerializer(json.JSONEncoder):
         if isinstance(obj, np.integer):
             return int(obj)
         if isinstance(obj, np.floating):
-            return float(round(obj, 3))
+            return float(obj)
         return super().default(obj)
         
 
@@ -46,7 +46,7 @@ def clean_records(df: pd.DataFrame) -> pd.DataFrame:
     except ParserError:
         raise
 
-def get_data_profile(df: pd.DataFrame) -> Tuple[str, str]:
+def get_data_profile(df: pd.DataFrame) -> Tuple[Dict[str, int | str], Dict[str, int | str]]:
     """
     Get profile about a pandas DataFrame object.
     returns a tuple of general and numeric dictionaries with columns as rows
@@ -65,8 +65,7 @@ def get_data_profile(df: pd.DataFrame) -> Tuple[str, str]:
         "obj_count": df_cp[object_cols].shape[1],
         "null_count": np.abs(df_cp.count().sum() - df_cp.shape[0] * df_cp.shape[1]),
         "unique_count": df_cp.nunique().sum(),
-        "duplicated_count": df_cp.duplicated().sum(),
-        "size": df_cp.memory_usage(deep=True).sum()
+        "duplicated_count": df_cp.duplicated().sum()
     }
 
     # 2. Numeric Profile
@@ -107,7 +106,7 @@ def transform_data(
         axis: int | None = None,
         thresh: int | None = None,
         save_to: str | Path | None= None
-        ) -> Tuple[str, str]:
+        ) -> Tuple[dict, dict]:
     if not isinstance(path, (Path, str)):
         raise TypeError(f"path args '{path}' not of type str or path")
     
@@ -149,7 +148,7 @@ def transform_data(
 
     try:
         if save_to:
-            fullpath = str(Path(f"{save_to}/cleaned_{filepath.name.lower()}"))
+            fullpath = str(Path(f"{save_to}/{filepath.name}"))
             cleaned_records.to_csv(fullpath)
             base_logger.internal(f"{filepath.name} saved at {fullpath}")
     except (ValueError, TypeError):
