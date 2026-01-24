@@ -14,7 +14,7 @@ from rich.console import Group
 from rich.rule import Rule
 from rich.align import Align
 
-from theodore.managers.daemon_manager import npy_file, new_df
+from theodore.managers.daemon_manager import SYS_VECTOR_FILE, DF_CHANNEL
 from theodore.managers.log_search import LogSearch
 from theodore.core.utils import user_info
 
@@ -34,7 +34,6 @@ def getStyle(value: int | float, middle_mark, threshold: int | float):
         return  "bold yellow"
     else:
         return "bold red"
-
 
 def runMath():
     success = ctxManager["success"]
@@ -72,10 +71,10 @@ def logHealthTable(keywords: List[str], logName: str, matrix: np.ndarray) -> Tab
     return table
 
 def sysHealthPanel() -> Panel | None:
-    if not npy_file.exists():
+    if not SYS_VECTOR_FILE.exists():
         return None
     
-    (cpu, ram, disk, sent, recv, threads) = np.load(npy_file)
+    (cpu, ram, disk, sent, recv, threads) = np.load(SYS_VECTOR_FILE)
 
 
     status = "[bold green]✓ Healthy[/]"
@@ -112,10 +111,10 @@ def sysHealthPanel() -> Panel | None:
 
 def newDataTable() -> Tuple[Panel, Panel] | None:
     # dataframe overview
-    if not new_df.exists():
+    if not DF_CHANNEL.exists():
         return None
     
-    df_profile = json.loads(new_df.read_text())
+    df_profile = json.loads(DF_CHANNEL.read_text())
     general = json.loads(df_profile["general"])
 
     t = Text(tab_size=20, no_wrap=False)
@@ -184,7 +183,7 @@ def newDataTable() -> Tuple[Panel, Panel] | None:
 
         
 async def runDashboard():
-    if not npy_file.exists():
+    if not SYS_VECTOR_FILE.exists():
         return user_info("Cannot run dash Server not running.")
     
     layout = Layout()
