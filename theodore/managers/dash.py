@@ -63,7 +63,7 @@ def logHealthTable(keywords: List[str], logName: str, matrix: np.ndarray) -> Tab
     )
 
     table.add_column("Keywords", header_style=header_style)
-    table.add_column("Freq", justify="right", header_style=header_style)
+    table.add_column("Freq", justify="right", header_style=header_style, min_width=50)
 
     colSum = np.sum(matrix, axis=0)
     for kw, freq in zip(keywords, colSum):
@@ -99,7 +99,7 @@ def sysHealthPanel() -> Panel | None:
             Group(
                 f"[{label}]CPU[/]: [{c_style}]{cpu}[/][{units}] %[/{units}]\n\n",
                 f"[{label}]Disk[/]: [{d_style}]{disk}[/][{units}] %[/{units}]\n\n",
-                f"[{label}]RAM[/]: [{r_style}]{ram}[/][{units}] %[/{units}]\n\n",
+                f"[{label}]RAM[/]: [{r_style}]{ram}[/][{units}] mb[/{units}]\n\n",
                 f"[{label}]Net Sent[/{label}]: {sent}[{units}] mb/s[/][yellow]↑[/]\n\n",
                 f"[{label}]Net Recv[/{label}]: {recv}[{units}] mb/s[/][{units}]↓[/{units}]\n"
             ),
@@ -139,13 +139,10 @@ def newDataTable() -> Tuple[Panel, Panel] | None:
 
     
     general_group = Panel(
-        Group(
-            Rule("DataFrame Overview", style=title),
-            t, 
-            t2
-            ), 
+        Group(t, t2), 
         box=box.MINIMAL, 
         border_style=label,
+        expand=True
     )
 
 
@@ -177,7 +174,7 @@ def newDataTable() -> Tuple[Panel, Panel] | None:
             )
         numeric_content = table
 
-    numeric_group = Panel(Group(Rule("Numeric Analysis", style=title), numeric_content), box=box.MINIMAL, border_style=label)
+    numeric_group = Panel(Group(Rule("Numeric Analysis", style=title), numeric_content), box=box.MINIMAL, border_style=label, expand=True)
 
     return general_group, numeric_group
 
@@ -206,25 +203,58 @@ async def runDashboard():
 
     with Live(layout, refresh_per_second=4, screen=True):
         while True:
+            layout["table1"].ratio = 1
+            layout["table2"].ratio = 1
+
             successMatrix, errorMatrix = runMath()
             if (data:=newDataTable()):
                 generalPanel, numericPanel = data
 
-                layout["table1"].update(generalPanel)
-                layout["table2"].update(numericPanel)
+
+                layout["table1"].update(Align(generalPanel, vertical="bottom"))
+                layout["table2"].update(Align(numericPanel, vertical="bottom"))
             else:
 
                 error = ctxManager["error"]
                 success = ctxManager["success"]
 
-                layout["table1"].update(Panel(logHealthTable(logName="error", keywords=error[1], matrix=errorMatrix), expand=True))
-                layout["table2"].update(Panel(logHealthTable(logName="success", keywords=success[1], matrix=successMatrix), expand=True))
+                layout["table1"].update(
+                    Panel(
+                        Align(
+                            Group(
+                                Rule(title=f"[{title}]Error Info[/]"),
+                                logHealthTable(logName="success", keywords=error[1], matrix=errorMatrix)
+                            ),
+                            vertical="bottom",
+                            align="center"),
+                        expand=True
+                        )
+                    )
+                
+                layout["table2"].update(
+                    Panel(
+                        Align(
+                            Group(
+                                Rule(title=f"[{title}]Success Info[/]"),
+                                logHealthTable(logName="success", keywords=success[1], matrix=successMatrix)
+                            ),
+                            vertical="bottom",
+                            align="center"),
+                        expand=True
+                        )
+                    )
             
             monitor = sysHealthPanel()
             if monitor is None:
-                layout["systemMonitor"].update((Group(
-                    f"[{label}]Theodore Offline[/]"
-                )))
+                layout["systemMonitor"].update(
+                Panel(Align(
+                    Group(f"[{label}]Theodore Offline[/]"),
+                    align="center",
+                    vertical="middle"
+                ),
+                border_style=label
+                )
+            )
             else:
                 layout["systemMonitor"].update(monitor)
 

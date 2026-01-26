@@ -9,6 +9,10 @@ license = {text = "None yet"}
 packages = [
     { include = "theodore" }
 ]
+dependencies = [
+    "faster-whisper>=1.2.1",
+    "sounddevice>=0.5.5",
+]
 
 [tool.poetry.dependencies]
 python = ">=3.11"
@@ -36,6 +40,8 @@ pydantic = {extras = ["email"], version = "^2.12.5"}
 alembic = "^1.17.2"
 watchdog = "^6.0.0"
 psutil = "^7.2.1"
+soundfile = "^0.13.1"
+scipy = "^1.17.0"
 
 [tool.poetry.scripts]
 theodore = "theodore.cli.__main__:theodore"

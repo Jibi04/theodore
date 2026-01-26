@@ -104,16 +104,16 @@ class ShellManager:
         return await self.runcommand(cmd=cmd, cmd_for="alembic")
 
     async def alembic_migrate(self, commit_message: str):
-        cmd = ["alembic", "revision" "--autogenerate", "-m", commit_message]
+        cmd = ["alembic", "revision", "--autogenerate", "-m", commit_message]
         return await self.runcommand(cmd=cmd, cmd_for="alembic")
 
     async def alembic_downgrade(self):
         cmd = ["alembic", "downgrade", "head"]
         return await self.runcommand(cmd=cmd, cmd_for="alembic")
     
-    async def runcommand(self, cmd, cmd_for):
+    async def runcommand(self, cmd, cmd_for,cwd=Path(__file__).parent.parent.parent):
         start = time.perf_counter()
-        (returncode, stdout, stderr) = await subprocess(cmd=cmd)
+        (returncode, stdout, stderr) = await subprocess(cmd=cmd, cwd=cwd)
         duration = round(time.perf_counter() - start, 3)
         (tid, workdone, errorweight) = self._extract_file_count(cmd=cmd_for, stdout=stdout, stderr=stderr)
         vector_perf.internal(numpy.array(
@@ -127,12 +127,12 @@ class ShellManager:
         return 1 if returncode == 0 else 0
 
 
-async def subprocess(cmd):
+async def subprocess(cmd, cwd):
     process = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
-        cwd=Path(__file__).parent.parent.parent
+        cwd=cwd
     )
 
     stdout, stderr = await process.communicate()
@@ -154,12 +154,12 @@ async def subprocess_with_progress(cmd, description="Processing..."):
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            stderr=asyncio.subprocess.STDOUT
         )
 
         errors_decoded = []
         while True:
-            line = await process.stderr.readline() + await process.stdout.readline()
+            line =  await process.stdout.readline()
             if not line:
                 break
 

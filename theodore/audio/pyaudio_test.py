@@ -1,10 +1,23 @@
 import pyaudio
 import numpy as np
 import traceback
+import wave
 
 from typing import List, Any
 from faster_whisper import WhisperModel
 from collections import deque
+
+
+AUDIO_PATH = "/home/jibi/scripts/theodore/theodore/audio/wave_write.wav"
+
+def write_audio(path, audio, sr=16000):
+    with wave.open(path, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sr)
+        wf.writeframes(audio.tobytes())
+    return path
+
     
 
 class Buffer:
@@ -43,7 +56,8 @@ class Consumer:
 
     def process_clip(self, clip: np.ndarray):
         print("Processing clip with Faster whisper...")
-        segments, info = self.model.transcribe(audio=clip, language="en", beam_size=5, vad_parameters=dict(min_silence_duration_ms=500))
+        clip = write_audio(audio=clip, path=AUDIO_PATH)
+        segments, info = self.model.transcribe(audio=clip, language="en", beam_size=1)
         for segment in segments:
             print(f"Start: {segment.start: .2f}\nStop: {segment.end: .2f}\nText: {segment.text}\nProbability: {segment.avg_logprob: .2f}")
 
@@ -128,9 +142,9 @@ class Producer:
 
             if is_talking:
                 # is talking signal is set, but silence detected wait for silence-count
-                silence_count += 1
+                if vol < self.thresh: silence_count += 1
 
-                if silence_count > 50:
+                if silence_count > 30:
                     print(f"\rsilence count reached {silence_count} initiating processing.")
                     raw_clip : np.ndarray = np.concatenate(pre_roll_snapshot + captured_frames)
                     
@@ -152,7 +166,7 @@ class Producer:
 
 if __name__ == "__main__":
     buffer = Buffer()
-    translator = Consumer(model_size="tiny.en")
+    translator = Consumer(model_size="base.en")
     listener = Producer(buffer=buffer, consumer=translator)
     try:
         print("Theodore Listening...")

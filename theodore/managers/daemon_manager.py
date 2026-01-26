@@ -8,7 +8,6 @@ from watchdog.observers import Observer
 from watchdog.events import (
     FileClosedEvent, FileSystemEventHandler, DirMovedEvent, 
     FileMovedEvent, DirDeletedEvent, FileDeletedEvent, 
-    FileCreatedEvent, DirCreatedEvent, PatternMatchingEventHandler
     )
 
 from theodore.core.file_helpers import resolve_path, organize
@@ -27,11 +26,14 @@ TEMP_DIR = tempfile.gettempdir()
 DF_CHANNEL = Path(f"{TEMP_DIR}/transformed_data.json")
 SYS_VECTOR_FILE = Path(f"{TEMP_DIR}/sys_vector.npy")
 SERVER_STATE_FILE = Path(f"{TEMP_DIR}/server_state.lock")
-WATCHER_ETL_DIR = Path(__file__).parent.parent/"data"
+WATCHER_ORGANIZER = Path("~/Downloads").expanduser().absolute()
+WATCHER_ETL_DIR = Path(__file__).parent.parent/"data"/"datasets"/"uncleaned_csv_files"
 CLEANED_ETL_DIR = Path(__file__).parent.parent/"data"/"datasets"/"cleaned_csv_files"
 
+WATCHER_ORGANIZER.mkdir(parents=True, exist_ok=True)
 CLEANED_ETL_DIR.mkdir(parents=True, exist_ok=True)
 WATCHER_ETL_DIR.mkdir(parents=True, exist_ok=True)
+
 
 class Signal:
     def __init__(self, client_cb, socket: str | Path = "/tmp/theodore.sock"):
@@ -61,17 +63,7 @@ class Signal:
     def stop(self):
         self._signal_shutdown_event.set()
 
-class ETL(PatternMatchingEventHandler):
-    def __init__(self, user, target_path: str | Path = WATCHER_ETL_DIR):
-        super().__init__(patterns=["*.csv"])
-        self.target_path = target_path
-
-    def on_created(self, event: DirCreatedEvent | FileCreatedEvent) -> None:
-        
-        return super().on_created(event)
-    
-    def on_moved(self, event: DirMovedEvent | FileMovedEvent) -> None:
-        return super().on_moved(event)
+class ETL:
 
     def transform(
         self,
@@ -354,32 +346,32 @@ Task response: {task_response}
                 """)
 
 class FileEventHandler:
-    def __init__(self, organizer_path: str, etl_path: Path | str =  Path(__file__).parent.parent/"data"/"csv_files"/"uncleaned"):
+    def __init__(self, organizer_path=WATCHER_ORGANIZER, etl_path=WATCHER_ETL_DIR):
+        resolved_paths = []
         for p in (organizer_path, etl_path):
             if not (path:=resolve_path(p)).exists():
                 path.mkdir(exist_ok=True, parents=True)
-                user_info(f"Target path {str(p)}, not resolved. \nCreating directory at {str(path)}")
+                user_info(f"Target path {str(p)}, not resolved. \nCreating directory at {str(path.absolute())}")
+            resolved_paths.append(p)
 
         self._user = getpass.getuser()
         self._watcher_shutdown_event = threading.Event()
-        self._observer_target_organizer = organizer_path
-        self._observer_target_etl = etl_path
+        self._observer_target_organizer = resolved_paths[0]
+        self._observer_target_etl = resolved_paths[1]
         self._observer = Observer()
         self._file_organize_event = FileEventManager(user=self._user, target_folder=self._observer_target_organizer)
-        self._etl_event_handler = ETL(user= self._user, target_path=self._observer_target_etl)
+        self._etl_event_handler = ETLEventManager(target_path=self._observer_target_etl)
 
     def start(self):
         user_info("Observer Running")
-
-        self._observer.schedule(event_handler=self._file_organize_event, path=str(self._observer_target_organizer), recursive=True)
-        self._observer.schedule(event_handler=self._etl_event_handler, path=str(self._observer_target_etl), recursive=True)
+        self._observer.schedule(event_handler=self._file_organize_event, path=self._observer_target_organizer, recursive=True)
+        self._observer.schedule(event_handler=self._etl_event_handler, path=self._observer_target_etl, recursive=True)
         self._observer.start()
 
         self._watcher_shutdown_event.wait()
 
+        self._observer.join(2)
         self._observer.stop()
-        self._observer.join()
-
         user_info("Observer Stopped")
 
     def stop(self):
@@ -416,7 +408,7 @@ class Worker:
         self.__scheduler = Scheduler()
         self.__monitor = SystemMonitor()
         self.__log_handler = LogsHandler()
-        self.__file_event_handler = FileEventHandler(organizer_path="~/Downloads")
+        self.__file_event_handler = FileEventHandler()
         self.__downloader = DownloadManager()
         self._worker_shutdown_event = asyncio.Event()
         self.__cmd_registry = {
@@ -429,62 +421,56 @@ class Worker:
         }
 
     async def start_processes(self) -> None:
-        try:
-            asyncio.create_task(
-                asyncio.to_thread(
-                    self.__monitor.start,
-                    3
-                ),
-                name="system-monitor"
+        asyncio.create_task(
+            asyncio.to_thread(
+                self.__monitor.start,
+                3
+            ),
+            name="system-monitor"
+        )
+
+        asyncio.create_task(
+            asyncio.to_thread(
+                self.__file_event_handler.start
+            ),
+            name="file-event-handler"
+        )
+
+        asyncio.create_task(
+            self.__scheduler.start(),
+            name="Scheduler"
+        )
+
+        self.signal_task = asyncio.create_task(
+            self.__signal.start(),
+            name="unix-server"
             )
 
-            asyncio.create_task(
-                asyncio.to_thread(
-                    self.__file_event_handler.start
-                ),
-                name="file-event-handler"
-            )
-
-            asyncio.create_task(
-                self.__scheduler.start(),
-                name="Scheduler"
-            )
-
-            self.signal_task = asyncio.create_task(
-                self.__signal.start(),
-                name="unix-server"
-                )
-
-            SERVER_STATE_FILE.write_text("running")
-            await self._worker_shutdown_event.wait()
-        finally:
-            # cleanup
-
-            DF_CHANNEL.unlink(missing_ok=True)
-            SYS_VECTOR_FILE.unlink(missing_ok=True)
-            SERVER_STATE_FILE.unlink(missing_ok=True)
+        SERVER_STATE_FILE.write_text("running")
+        await self._worker_shutdown_event.wait()
+        # cleanup
+        DF_CHANNEL.unlink(missing_ok=True)
+        SYS_VECTOR_FILE.unlink(missing_ok=True)
+        SERVER_STATE_FILE.unlink(missing_ok=True)
 
     async def stop_processes(self) -> None:
-        try:
 
-            await self.__dispatch.shutdown()
-            self.__monitor.stop()
-            self.__file_event_handler.stop()
-            self.__scheduler.stop()
-            self.__signal.stop()
+        await self.__dispatch.shutdown()
+        self.__monitor.stop()
+        self.__file_event_handler.stop()
+        self.__scheduler.stop()
+        self.__signal.stop()
 
-            # Await server shutdown
-            await self.signal_task
+        # Await server shutdown
+        await self.signal_task
 
-            # free blocking start-processes method
-            
-            self._worker_shutdown_event.set()
-        finally:
-            # cleanup
-            
-            SERVER_STATE_FILE.unlink(missing_ok=True)
-            SYS_VECTOR_FILE.unlink(missing_ok=True)
-            DF_CHANNEL.unlink(missing_ok=True)
+        # free blocking start-processes method
+        
+        self._worker_shutdown_event.set()
+        # cleanup
+        SYS_VECTOR_FILE.unlink(missing_ok=True)
+        DF_CHANNEL.unlink(missing_ok=True)
+        SERVER_STATE_FILE.unlink(missing_ok=True)
 
     async def __parse_message(self, reader: asyncio.StreamReader) -> bytes | None:
         try:
@@ -620,15 +606,33 @@ class Worker:
         self.__dispatch.dispatch_one(basename, func, file_args)
         return
 
+class ETLEventManager(FileSystemEventHandler):
+    def __init__(self, target_path: str | Path):
+        self.target_path = target_path
+        self.file_manager = FileManager()
+        self.etl_manager = ETL()
+
+    def on_moved(self, event: DirMovedEvent | FileMovedEvent) -> None:
+        if (p:=resolve_path(event.src_path)).is_dir():
+            return organize(p)
+        return super().on_moved(event)
+
+    def on_closed(self, event: FileClosedEvent) -> None:
+        if (p:=resolve_path(event.src_path)).is_dir():
+            return organize(p)
+        user_info(f"File detected in data directory. Processing...\nPath: {str(p)}")
+        if not p.suffix == ".csv":
+            return self.file_manager.move_dst_unknown(src=p)
+        signal = self.etl_manager.transform(path=p)
+        if signal:
+            self.file_manager.move_file(src=str(event.src_path), dst="~/scripts/theodore/theodore/tests/original_files")
+        return super().on_closed(event)
+
 class FileEventManager(FileSystemEventHandler):
     def __init__(self, user: str, target_folder: str = ""):
         self._target_folder = target_folder
         self._user = user
         self.file_manager = FileManager()
-        self.etl_handler = ETL(user=self._user)
-    
-    def on_created(self, event: DirCreatedEvent | FileCreatedEvent) -> None:
-        ...
 
     def on_moved(self, event: DirMovedEvent | FileMovedEvent) -> None:
         user_info(f"{event.src_path} Moved to {event.dest_path}. USER: {self._user}")
@@ -636,14 +640,7 @@ class FileEventManager(FileSystemEventHandler):
     def on_closed(self, event: FileClosedEvent) -> None:
         if (path:=resolve_path(event.src_path)).is_dir():
             return
-
         user_info(f"New {resolve_path(event.src_path).suffix} file Detected Processing...\n {event.src_path}")
-        if path.suffix == ".csv":
-            start = time.perf_counter()
-            success = self.etl_handler.transform(path=path)
-            end = time.perf_counter()
-            vector_perf.internal(numpy.array([1 if success else 0, end - start, ""]))
-            return
         self.file_manager.move_dst_unknown(src=path)
 
     def on_deleted(self, event: DirDeletedEvent | FileDeletedEvent) -> None:

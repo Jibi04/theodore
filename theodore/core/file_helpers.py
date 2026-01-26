@@ -33,7 +33,7 @@ dst_map = {
     '.docx': HOME / DOCUMENTS / 'docx_files',
     '.tar': HOME / DOCUMENTS / 'tar_files',
     '.zip': HOME / DOCUMENTS / 'zip_files',
-    '.csv': HOME / "scripts/theodore/theodore/tests/datasets/unclean",
+    '.csv': HOME / "scripts/theodore/theodore/data/datasets/uncleaned_csv_files",
     '.xlsx': HOME / DOCUMENTS/ 'excel_files',
     "unknown": HOME/"unknown_downloads"
 }
@@ -69,21 +69,23 @@ def resolve_entry(
     ) -> Tuple[str, str]:
     
     validate_source(src)
-    Path(dst).expanduser().mkdir(parents=True, exist_ok=True)
-    _src = Path(src)
+    abs_dst = Path(dst).expanduser().absolute()
+    abs_dst.mkdir(parents=True, exist_ok=True)
+    
+    abs_src = resolve_path(src)
 
-    if not Path(f"{dst}/{_src.name}").exists():
-        return str(_src), f"{dst}/{_src.name}"
+    if not Path(f"{abs_dst}/{abs_src.name}").exists():
+        return str(abs_src), f"{abs_dst}/{abs_src.name}"
 
-    basename = _src.name
+    basename = abs_src.name
     curr_time = int(time.time())
-    new_dst_path = f"{dst}/{curr_time}-{basename}"
+    new_dst_path = f"{abs_dst}/{curr_time}-{basename}"
 
-    return str(_src), new_dst_path
+    return str(abs_src), new_dst_path
 
 
 def resolve_path(path):
-    return Path(path).expanduser()
+    return Path(path).expanduser().absolute()
 
 
 def iterate_path(pattern: Generator):
@@ -172,7 +174,7 @@ def organize(src_path: str | Path) -> None:
         dst.expanduser().mkdir(parents=True, exist_ok=True)
 
         move_entry(src=path, dst=dst)
-        base_logger.internal(f"Moved {path.name} from {path.parent} to {dst.name}.")
+        base_logger.internal(f"\nMoved {path.name} from {path.parent} to {dst.as_posix()}.")
 
 
 def archive_folder(src: str | Path, filename: str | None = None, format: str = ".tar.gz"):

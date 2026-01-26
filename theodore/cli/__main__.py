@@ -1,7 +1,7 @@
 import click
 import rich_click as click
 
-import concurrent.futures
+import time
 
 from theodore.cli.config_cli import config
 from theodore.cli.download_cli import downloads
@@ -20,11 +20,19 @@ from theodore.managers.file_manager import FileManager
 # ======= Theme Import instantiation ========
 cli_defaults()
 
+def load_time(func):
+    def wrapper(*args, **kwargs):
+        start_time = time.perf_counter()
+        val = func(*args, **kwargs)
+        base_logger.internal(f"{func.__name__} took {round(time.perf_counter() - start_time, 5)}s to load.")
+        return val
+    return wrapper
 
 @click.group(context_settings=dict(help_option_names=['--help', 'help']))
 @click.version_option("0.1.0", prog_name="Theodore")
 @click.option("--verbose", '-v', is_flag=True, help="Enable verbose output")
 @click.pass_context
+@load_time
 def theodore(ctx: click.Context, verbose):
     """🤖 Theodore — your personal CLI Assistant"""
 
@@ -56,6 +64,8 @@ theodore.add_command(add_git, "add")
 theodore.add_command(add_commit, "commit")
 theodore.add_command(upgrade_migration, "upgrade")
 theodore.add_command(migrate_db, "migrate")
+
+
 
 
 if __name__ == "__main__":

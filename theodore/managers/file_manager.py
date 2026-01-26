@@ -30,7 +30,7 @@ class FileManager:
         prompt = f'Your search matched the above file(s). to move to {dest.name} confirm by passing the id(s) of the file(s) (q) to quit: '
         if all: prompt = "[warning]Are you sure you want to move all files? [yes -(y) /no -(n)]: "
 
-        response = self.process_non_conventional(func=move_entry, dst=dst, src=str(src), prompt=prompt)
+        response = self.process_non_conventional(func=move_entry, dst=dest, src=str(src), prompt=prompt)
         if response:
             user_info(f"{response} tasks moved.")
 
