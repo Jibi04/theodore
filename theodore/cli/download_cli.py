@@ -171,3 +171,4 @@ async def status(ctx, filename):
 
     percentage = "Completed" if data.is_downloaded else _percentage or "jj0" + "% done!" 
     user_info(f"[File: {name}  | Status: {status_text} | Path: {data.filepath} | Downloaded size: {percentage}]")
+

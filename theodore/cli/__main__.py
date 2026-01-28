@@ -1,8 +1,13 @@
+import time
 import click
 import rich_click as click
+from click_repl import register_repl
 
-import time
+from sentence_transformers import SentenceTransformer
 
+
+from theodore.ai.dispatch import dispatch
+from theodore.ai.route_builder import RouteBuilder
 from theodore.cli.config_cli import config
 from theodore.cli.download_cli import downloads
 from theodore.cli.file_cli import file_manager, organize
@@ -15,7 +20,6 @@ from theodore.cli.dash_cli import dash
 from theodore.core.theme import cli_defaults
 from theodore.core.logger_setup import base_logger
 from theodore.managers.file_manager import FileManager
-
 
 # ======= Theme Import instantiation ========
 cli_defaults()
@@ -65,8 +69,25 @@ theodore.add_command(add_commit, "commit")
 theodore.add_command(upgrade_migration, "upgrade")
 theodore.add_command(migrate_db, "migrate")
 
+@theodore.command()
+def live():
+    click.echo(click.style("Theodore is now Live. Type 'help' for commands.", fg="cyan"))
+    from click_repl import repl
+
+    text = "" # Don't know how to text reponses yet!
+    model = SentenceTransformer("all-MiniLM-L6-v2")
+    route_result = RouteBuilder(text, model=model)
+
+    if route_result is None:
+        click.echo("Error could not parse command!")
+        return
+    
+    response = dispatch(route_result)
+
+    repl(click.get_current_context())
 
 
 
+register_repl(theodore)
 if __name__ == "__main__":
     theodore()

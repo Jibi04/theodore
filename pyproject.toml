@@ -10,8 +10,15 @@ packages = [
     { include = "theodore" }
 ]
 dependencies = [
+    "click-repl>=0.3.0",
     "faster-whisper>=1.2.1",
+    "gensim>=4.4.0",
+    "pip>=25.3",
+    "sentence-transformers>=5.2.0",
     "sounddevice>=0.5.5",
+    "spacy>=3.8.11",
+    "spacy-lookups-data>=1.0.5",
+    "torch>=2.10.0",
 ]
 
 [tool.poetry.dependencies]
@@ -49,3 +56,12 @@ theodore = "theodore.cli.__main__:theodore"
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }

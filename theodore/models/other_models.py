@@ -1,6 +1,6 @@
 from theodore.models.base import meta
 from theodore.core.utils import local_tz
-from sqlalchemy import Table, Column, String, DateTime, Boolean
+from sqlalchemy import Table, Column, String, DateTime, Boolean, TIMESTAMP, BLOB
 
 Queues = Table(
     'queues',
@@ -20,5 +20,14 @@ FileLogsTable = Table(
     Column('destination', String(100)),
     Column('is_downloaded', Boolean, default=False),
     Column('timestamp', DateTime(timezone=local_tz)),
+)
+
+LOGSEARCH = Table(
+    "logs",
+    meta,
+    Column('timestamp', TIMESTAMP, nullable=False),
+    Column('level', String(20), nullable=False),
+    Column('message', String(256)),
+    Column('vector', BLOB)
 )
 

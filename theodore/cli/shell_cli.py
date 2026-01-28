@@ -4,12 +4,15 @@ import traceback
 import asyncio
 
 from pydantic import ValidationError
+from datetime import datetime
+from tzlocal import get_localzone
 
 from theodore.core.utils import user_info, user_error
 from theodore.cli.async_click import AsyncCommand
 from theodore.managers.shell_manager import ShellManager
 
 SHELL_MANAGER = ShellManager()
+
 
 @click.group()
 def shell():
@@ -59,7 +62,8 @@ async def add_commit(ctx, message):
     """Commit staged git files"""
     try:
         returncode = await SHELL_MANAGER.commit_git(message=message)
-        user_info("Files commited!") if returncode else user_error(f"File commit failed.")
+        cmt_msg = f"Files Committed\n Msg: {message}\nDate: {datetime.now(get_localzone())}"
+        user_info(cmt_msg.partition("\n")[0]) if returncode else user_error(f"Commit failed.")
     except (ValueError):
         user_error(traceback.format_exc())
 
@@ -74,7 +78,6 @@ async def migrate_db(ctx, message):
         user_info("Alembic Migration done.") if returncode else user_error(f"Alembic Migration failed.")
     except (ValueError):
         user_error(traceback.format_exc())
-
 
 @shell.command(cls=AsyncCommand, name="upgrade-migration")
 @click.option("--message", "-m", type=str, required=True)
