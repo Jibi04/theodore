@@ -10,7 +10,7 @@ class LogService:
 
 
 def arr_to_bytes(arr: np.ndarray):
-    return arr.tobytes()
+    return arr.astype(np.float32).tobytes()
 
 def arr_from_bytes(blob: bytes) -> np.ndarray:
     return np.frombuffer(blob,dtype=np.float32)

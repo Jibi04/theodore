@@ -75,13 +75,13 @@ class DownloadManager:
         user_success(f'{filename} download complete and database updated!')
         return
 
-    async def download_file(self, url: str, filepath: Path | str, filename: str | None=None, chunksize: int=8192, retries: int=10) -> None:
+    async def download_file(self, url: str, directory: Path | str, filename: str | None=None, chunksize: int=8192, retries: int=10) -> None:
         async with self._workers:
             self.active_events[filename] = asyncio.Event()
             self.active_events[filename].set()
 
             base_logger.internal('Preparing file directory for download')
-            filepath = Path(filepath).expanduser()
+            filepath = Path(directory).expanduser()
             filepath.parent.mkdir(parents=True, exist_ok=True)
             
             if not filename:

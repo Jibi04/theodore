@@ -9,9 +9,7 @@ from tzlocal import get_localzone
 
 from theodore.core.utils import user_info, user_error
 from theodore.cli.async_click import AsyncCommand
-from theodore.managers.shell_manager import ShellManager
-
-SHELL_MANAGER = ShellManager()
+from theodore.ai.dispatch import SHELL
 
 
 @click.group()
@@ -27,7 +25,7 @@ def shell():
 async def backup(ctx, path, **kwds):
     """Backup files to cloud using rclone"""
     try:
-        task = asyncio.create_task(SHELL_MANAGER.backup_files_rclone(path=path, **kwds))
+        task = asyncio.create_task(SHELL.backup_files_rclone(directory=path, **kwds))
         user_info("Backup Initiated!")
         returncode = task.result()
         user_info(f"{path} backup") if returncode else user_error(f"{path} backup failed.")
@@ -40,7 +38,7 @@ async def backup(ctx, path, **kwds):
 async def custom_cmd(ctx, cmd):
     """Perform custom shell commands."""
     try:
-        returncode = await SHELL_MANAGER.custom_shell_cmd(cmd=cmd)
+        returncode = await SHELL.custom_shell_cmd(custom_cmd=cmd)
         user_info(f"Success") if returncode else user_error(f"Custome cmd failed.")
     except (ValueError, ValidationError):
         user_error(traceback.format_exc())
@@ -50,7 +48,7 @@ async def custom_cmd(ctx, cmd):
 async def add_git(ctx):
     """Stage git files for commit"""
     try:
-        returncode = await SHELL_MANAGER.stage()
+        returncode = await SHELL.stage()
         user_info("Files Staged!") if returncode else user_error(f"File staging failed.")
     except (ValueError, ValidationError):
         user_error(traceback.format_exc())
@@ -61,7 +59,7 @@ async def add_git(ctx):
 async def add_commit(ctx, message):
     """Commit staged git files"""
     try:
-        returncode = await SHELL_MANAGER.commit_git(message=message)
+        returncode = await SHELL.commit_git(message=message)
         cmt_msg = f"Files Committed\n Msg: {message}\nDate: {datetime.now(get_localzone())}"
         user_info(cmt_msg.partition("\n")[0]) if returncode else user_error(f"Commit failed.")
     except (ValueError):
@@ -74,7 +72,7 @@ async def add_commit(ctx, message):
 async def migrate_db(ctx, message):
     """generate revision for database migration"""
     try:
-        returncode = await SHELL_MANAGER.alembic_migrate(commit_message=message)
+        returncode = await SHELL.alembic_migrate(commit_message=message)
         user_info("Alembic Migration done.") if returncode else user_error(f"Alembic Migration failed.")
     except (ValueError):
         user_error(traceback.format_exc())
@@ -85,7 +83,7 @@ async def migrate_db(ctx, message):
 async def upgrade_migration(ctx, message):
     """Implement revision"""
     try:
-        returncode = await SHELL_MANAGER.alembic_migrate(commit_message=message)
+        returncode = await SHELL.alembic_migrate(commit_message=message)
         user_info("Alembic upgrade done.") if returncode else user_error(f"Alembic upgrade failed.")
     except (ValueError):
         user_error(traceback.format_exc())
@@ -96,7 +94,7 @@ async def upgrade_migration(ctx, message):
 @click.pass_context
 async def downgrade_migration(ctx, message):
     try:
-        returncode = await SHELL_MANAGER.alembic_migrate(commit_message=message)
+        returncode = await SHELL.alembic_migrate(commit_message=message)
         user_info("Alembic downgrade done.") if returncode else user_error(f"Alembic downgrade failed.")
     except (ValueError):
         user_error(traceback.format_exc())

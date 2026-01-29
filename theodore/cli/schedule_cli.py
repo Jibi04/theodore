@@ -3,8 +3,7 @@ import struct
 import json
 
 from theodore.cli.async_click import AsyncCommand
-from theodore.managers.daemon_manager import Worker
-
+from theodore.ai.dispatch import WORKER, DISPATCH
 
 class KeyValueParse(click.ParamType):
     name = "KV_PAIRS"
@@ -66,7 +65,7 @@ async def schedule(
     Automate ETL tasks, File downloads File organization etc with Scheduler.
     Apscheduler API Integration comming soon.
     """
-    worker = Worker()
+    worker = WORKER
     package = {
         "cmd": "START-ETL",
         "file_args": ctx.params
@@ -74,4 +73,4 @@ async def schedule(
     
     packed = json.dumps(package).encode()
     header = struct.pack("!I", len(packed))
-    await worker.send_signal(header=header, message=packed)
+    await DISPATCH.dispatch_cli(worker.send_signal, header=header, message=packed)

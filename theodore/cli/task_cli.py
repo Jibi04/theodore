@@ -5,9 +5,9 @@ from theodore.cli.async_click import AsyncCommand
 from dateparser import parse
 from click_option_group import optgroup, RequiredMutuallyExclusiveOptionGroup, RequiredAllOptionGroup, RequiredAnyOptionGroup
 from sqlalchemy.exc import SQLAlchemyError
-from theodore.core.utils import user_error, user_success, user_warning, user_info, get_task_table, base_logger
+from theodore.core.utils import user_error, user_success, user_info, get_task_table, base_logger
 from theodore.core.theme import console
-from theodore.managers.tasks_manager import TaskManager
+from theodore.ai.dispatch import TASK_MANAGER
  
 
 
@@ -15,7 +15,7 @@ from theodore.managers.tasks_manager import TaskManager
 @click.pass_context             
 def task_manager(ctx):
     """Manage to-dos"""
-    ctx.obj['task_manager'] = TaskManager()
+    ctx.obj['task_manager'] = TASK_MANAGER
 
 @task_manager.command(cls=AsyncCommand)
 @click.option('--title', '-t', type=str, help="task title", required=True)

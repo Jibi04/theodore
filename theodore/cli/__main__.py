@@ -6,7 +6,7 @@ from click_repl import register_repl
 from sentence_transformers import SentenceTransformer
 
 
-from theodore.ai.dispatch import dispatch
+from theodore.ai.dispatch import DISPATCH, FILEMANAGER
 from theodore.ai.route_builder import RouteBuilder
 from theodore.cli.config_cli import config
 from theodore.cli.download_cli import downloads
@@ -19,7 +19,6 @@ from theodore.cli.weather_cli import weather
 from theodore.cli.dash_cli import dash
 from theodore.core.theme import cli_defaults
 from theodore.core.logger_setup import base_logger
-from theodore.managers.file_manager import FileManager
 
 # ======= Theme Import instantiation ========
 cli_defaults()
@@ -42,7 +41,7 @@ def theodore(ctx: click.Context, verbose):
 
     ctx.ensure_object(dict)
     ctx.obj["verbose"] = verbose
-    ctx.obj['file_manager'] = FileManager()
+    ctx.obj['file_manager'] = FILEMANAGER
     base_logger.internal("Theodore Initialized")
 
 @click.group()
@@ -82,7 +81,7 @@ def live():
         click.echo("Error could not parse command!")
         return
     
-    response = dispatch(route_result)
+    response = DISPATCH.dispatch_router(ctx=route_result)
 
     repl(click.get_current_context())
 

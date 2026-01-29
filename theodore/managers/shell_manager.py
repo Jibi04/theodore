@@ -11,9 +11,8 @@ from pathlib import Path
 from pydantic import BaseModel, ValidationError
 from rich.layout import Layout
 from rich.live import Live
-from rich.progress import Progress, BarColumn, TextColumn, ProgressColumn
+from rich.progress import Progress, BarColumn, TextColumn
 from theodore.core.file_helpers import resolve_path
-from theodore.core.utils import user_info
 from theodore.core.logger_setup import vector_perf
 
 class ValidateArgs(BaseModel):
@@ -60,19 +59,19 @@ class ShellManager:
 
         
 
-    async def custom_shell_cmd(self, cmd):
-        if not isinstance(cmd, str):
-            raise ValueError(f"Cannot understand non string commands. {cmd}")
+    async def custom_shell_cmd(self, custom_cmd):
+        if not isinstance(custom_cmd, str):
+            raise ValueError(f"Cannot understand non string commands. {custom_cmd}")
         
-        if "rm" in cmd.lower():
+        if "rm" in custom_cmd.lower():
             return NotImplemented
         
-        _cmd = cmd.split(" ")
+        _cmd = custom_cmd.split(" ")
         return await self.runcommand(cmd=_cmd, cmd_for="custom")
 
-    async def backup_files_rclone(self, path: str | Path, drive: str | None = None, drive_env_key: str | None = None):
+    async def backup_files_rclone(self, directory: str | Path, drive: str | None = None, drive_env_key: str | None = None):
         try:
-            data = ValidateArgs(path=path, drive=drive, drive_env_key=drive_env_key)
+            data = ValidateArgs(path=directory, drive=drive, drive_env_key=drive_env_key)
         except ValidationError as e:
             raise e
 
@@ -82,15 +81,15 @@ class ShellManager:
         if cloud_path is None:
             raise ValueError("No destination path nor environment key provided.")
         
-        if not (p:=resolve_path(path)).exists():
-            raise ValueError(f"Path {path} could not be resolved.")
+        if not (p:=resolve_path(directory)).exists():
+            raise ValueError(f"Path {directory} could not be resolved.")
         
         cmd = ["rclone", "copy", str(p), cloud_path, "--progress", "--stats", "1s"]
         return await subprocess_with_progress(cmd=cmd)
 
-    async def stage(self, path = "."):
-        if not (p:=resolve_path(path)).exists():
-            raise ValueError(f"Path {path} could not be resolved.")
+    async def stage(self, directory = "."):
+        if not (p:=resolve_path(directory)).exists():
+            raise ValueError(f"Path {directory} could not be resolved.")
         
         cmd = ["git", "add", p]
         return await self.runcommand(cmd=cmd, cmd_for="git")

@@ -1,20 +1,20 @@
 import click
-import re
 import traceback
 import rich_click as click
-from click_option_group import optgroup, RequiredAllOptionGroup
-from typing import Any
+
 from theodore.core.theme import console
 from theodore.core.utils import user_error, user_info
-from theodore.managers.file_manager import FileManager
+from click_option_group import optgroup, RequiredAllOptionGroup
+from theodore.ai.dispatch import DISPATCH, FILEMANAGER, FileManager
 from theodore.core.file_helpers import archive_folder, extract_folder, resolve_path
+
 
 
 @click.group()
 @click.pass_context
 def file_manager(ctx):
     """Move, copy, delete and organize files and folders"""
-    ctx.obj['file_manager'] = FileManager()
+    ctx.obj['file_manager'] = FILEMANAGER
 
 
 @file_manager.command()
@@ -27,7 +27,7 @@ def move(ctx, name, destination, all):
     """Move files and folder(s) to destinations of your choice"""
     manager: FileManager = ctx.obj['file_manager']
     
-    manager.move_file(src=name, dst=destination, all=all)
+    DISPATCH.dispatch_cli(func=manager.move_file, src=name, dst=destination, all=all)
     return
 
 @file_manager.command()
@@ -40,7 +40,7 @@ def copy(ctx, name, destination, all):
     """Move files and folder(s) to destinations of your choice"""
     manager: FileManager = ctx.obj['file_manager']
     
-    manager.copy_file(src=name, dst=destination, all=all)
+    DISPATCH.dispatch_cli(manager.copy_file, src=name, dst=destination, all=all)
     return
 
 @file_manager.command()
@@ -50,7 +50,7 @@ def copy(ctx, name, destination, all):
 def delete(ctx, name, all):
     """Permanent delete files and folder(s). Cannot undo action"""
     manager: FileManager = ctx.obj['file_manager']
-    manager.delete_file(src=name, all=all)
+    DISPATCH.dispatch_cli(manager.delete_file, src=name, all=all)
     return
 
 @file_manager.command()
@@ -67,43 +67,44 @@ def undo(ctx):
 def organize(ctx, source_dir):
     """Automate file Movement, source directory defaults to current directory."""
     manager: FileManager = ctx.obj['file_manager']
-    manager.organize_files(src=source_dir)
+    DISPATCH.dispatch_cli(manager.organize_files, src=source_dir)
     return
 
-
 @file_manager.command()
-@click.option('--dir-name', '-d', type=str, help='Name of directory to list', required=True)
+@click.option('--directory', '-d', type=str, help='Name of directory to list', required=True)
 @click.pass_context
 def list(ctx, dir_name):
     """Lists all contents of directory"""
     manager: FileManager = ctx.obj['file_manager']
 
-    files = manager.list_all_files(target_dir=dir_name)
+    files = DISPATCH.dispatch_cli(manager.list_all_files,target_dir=dir_name)
 
     table, _ = manager.get_files_table(files)
     console.print(table)
     return
 
 @file_manager.command()
-@click.option("--filepath", "-p", required=True)
+@click.option("--directory", "-p", required=True)
 @click.option("--filename", "-n")
 @click.option("--format", type=click.Choice([".xz", ".gz", ".gz2", ".zst"]), default=".xz")
 @click.pass_context
-def compress(ctx, filepath, filename, format):
-    if not (path := resolve_path(filepath)).exists():
-        user_error(f"Path {filepath} could not be resolved.")
+def compress(ctx, directory, filename, format):
+    """Compress Files / Folders"""
+    if not (path := resolve_path(directory)).exists():
+        user_error(f"Path {directory} could not be resolved.")
         return
     name = filename or path.stem
     returncode = archive_folder(src=path, filename=name, format=".tar"+format)
     user_info(f"{name} compressed") if returncode else user_error(f"{name} compression failed.")
 
 @file_manager.command()
-@click.option("--filepath", "-p", required=True)
+@click.option("--directory", "-p", required=True)
 @click.option("--filename", "-n")
 @click.pass_context
-def extract(ctx, filepath, filename):
-    if not (path := resolve_path(filepath)).exists():
-        user_error(f"Path {filepath} could not be resolved.")
+def extract(ctx, directory, filename):
+    """Extract Files / Folders"""
+    if not (path := resolve_path(directory)).exists():
+        user_error(f"Path {directory} could not be resolved.")
         return
     name = filename or path.stem
     try:

@@ -4,17 +4,16 @@ import rich_click as click
 from sqlalchemy import Row
 from click_option_group import RequiredMutuallyExclusiveOptionGroup, optgroup
 from theodore.models.downloads import DownloadTable
-from theodore.managers.download_manager import DownloadManager
-from theodore.managers.daemon_manager import Worker
 from theodore.core.utils import Downloads, user_error, user_info, DBTasks
 from theodore.cli.async_click import AsyncCommand
 from pathlib import Path
 from typing import Iterable, Any
 
-downloader = Downloads(DownloadTable)
-manager = DownloadManager()
-worker = Worker()
+from theodore.ai.dispatch import DOWNLOADMANAGER, WORKER, DISPATCH
 
+downloader = Downloads(DownloadTable)
+manager = DOWNLOADMANAGER
+worker = WORKER
 # ------------------------------------------
 #             Main Downloads CLI 
 # ------------------------------------------
@@ -29,7 +28,7 @@ async def send_command(cmd, file_args: Iterable) -> None:
     message = json.dumps(mail_data).encode()
     header = struct.pack("!I", len(message))
 
-    await worker.send_signal(header=header, message=message)
+    await DISPATCH.dispatch_cli(func=worker.send_signal, header=header, message=message)
     return
 
 async def resolve_file(filename):

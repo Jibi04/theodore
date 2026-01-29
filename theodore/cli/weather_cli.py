@@ -4,12 +4,11 @@ import asyncio
 from pydantic import BaseModel, Field
 
 from theodore.cli.async_click import AsyncCommand
-from theodore.managers.weather_manager import WeatherManager
 from theodore.core.utils import base_logger, user_error, DBTasks
 from theodore.core.theme import console
+from theodore.ai.dispatch import WEATHER
 from theodore.models.configs import ConfigTable
 
-weather_manager = WeatherManager()
 # def get_location():
 #     loop = asyncio.get_running_loop()
 #     loop.
@@ -37,7 +36,7 @@ async def current(ctx, temp, location, clear_cache, speed):
     if not location:
         location = ctx.obj['default_location']
 
-    response = await weather_manager.make_request(query='forecast', location=location, retries=4)
+    response = await WEATHER.make_request(query='forecast', location=location, retries=4)
 
     if not response.get('ok'):
         base_logger.internal(f"Failed Aborting")
@@ -45,7 +44,7 @@ async def current(ctx, temp, location, clear_cache, speed):
         return
     
     data = response.get("data")
-    table = weather_manager.get_current_weather_table(data, temp=temp, speed=speed)
+    table = WEATHER.get_current_weather_table(data, temp=temp, speed=speed)
 
     console.print(table)
     return
@@ -58,18 +57,18 @@ async def current(ctx, temp, location, clear_cache, speed):
 async def forecast(ctx, temp, location, clear_cache):
     """Get future weather update up to 7 day forecasts"""
     base_logger.internal('Getting weather manager')
-    weather_manager = ctx.obj['weather_manager']
+    WEATHER = ctx.obj['WEATHER']
 
     base_logger.internal('Calling make request call')
 
-    response = await weather_manager.make_request(location=location, retries=4)
+    response = await WEATHER.make_request(location=location, retries=4)
     if not response.get('ok'):
         base_logger.internal(f"Failed Aborting")
         user_error(response.get('message'))
         return
     
     data = response.get("data")
-    table = weather_manager.get_weather_forecast_table(data, temp)
+    table = WEATHER.get_weather_forecast_table(data, temp)
 
     console.print(table)
     return
@@ -84,16 +83,16 @@ async def forecast(ctx, temp, location, clear_cache):
 async def alerts(ctx, location, clear_cache):
     """Get alert for weather conditions around you"""
     base_logger.internal('Getting weather manager')
-    weather_manager = ctx.obj['weather_manager']
+    WEATHER = ctx.obj['WEATHER']
 
     base_logger.internal('Calling make request call')
-    response = await weather_manager.make_request(query='alerts', location=location, retries=4)
+    response = await WEATHER.make_request(query='alerts', location=location, retries=4)
     if not response.get('ok'):
         user_error(response.get('message'))
         return
     data = response.get("data")
 
-    table = weather_manager.get_weather_alerts_table(data)
+    table = WEATHER.get_weather_alerts_table(data)
     console.print(table)
 
     return
