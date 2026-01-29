@@ -2,7 +2,6 @@ import click
 import struct
 import json
 
-from theodore.cli.async_click import AsyncCommand
 from theodore.ai.dispatch import WORKER, DISPATCH
 
 class KeyValueParse(click.ParamType):
@@ -47,7 +46,7 @@ class Dtype(click.ParamType):
 KV_PAIRS = KeyValueParse()
 DEFAULT_TYPE = Dtype()
 
-@click.command(cls=AsyncCommand)
+@click.command()
 @click.option("--key", required=True, type=str)
 @click.option("--func_args", "--args", type=KV_PAIRS, help="key=value comma separated arguments 'key1=val1,key2=val2'")
 @click.option("--trigger", "-t", type=click.Choice(["cron", "interval"]), default="interval")
@@ -57,7 +56,7 @@ DEFAULT_TYPE = Dtype()
 @click.option("-dow", type=click.Choice([1, 2, 3, 4, 5, 6, 7]), default=None)
 @click.option("--profiling_enabled", is_flag=True, default=True)
 @click.pass_context
-async def schedule(
+def schedule(
     ctx: click.Context,
     **kwargs
     ):
@@ -73,4 +72,4 @@ async def schedule(
     
     packed = json.dumps(package).encode()
     header = struct.pack("!I", len(packed))
-    await DISPATCH.dispatch_cli(worker.send_signal, header=header, message=packed)
+    DISPATCH.dispatch_cli(worker.send_signal, header=header, message=packed)

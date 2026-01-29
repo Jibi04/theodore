@@ -1,9 +1,8 @@
 import time
 import click
+import traceback
 import rich_click as click
-from click_repl import register_repl
 
-from sentence_transformers import SentenceTransformer
 
 
 from theodore.ai.dispatch import DISPATCH, FILEMANAGER
@@ -69,24 +68,34 @@ theodore.add_command(upgrade_migration, "upgrade")
 theodore.add_command(migrate_db, "migrate")
 
 @theodore.command()
-def live():
-    click.echo(click.style("Theodore is now Live. Type 'help' for commands.", fg="cyan"))
-    from click_repl import repl
-
-    text = "" # Don't know how to text reponses yet!
+@click.pass_context
+def live(ctx):
+    """Interact with click in interactive Mode."""
+    from sentence_transformers import SentenceTransformer
     model = SentenceTransformer("all-MiniLM-L6-v2")
-    route_result = RouteBuilder(text, model=model)
 
-    if route_result is None:
-        click.echo("Error could not parse command!")
-        return
+    click.echo("Hi I'm Theodore.")
+    while True:
+        try:
+            text = input("> ")
+            request = text.strip()
+            if not request:
+                continue
+            route_result = RouteBuilder(text, model=model)
+            if route_result is None:
+                click.echo("Error could not parse command!")
+                continue
+            DISPATCH.dispatch_router(ctx=route_result)
+        except KeyboardInterrupt:
+            click.echo("\nShut down Initiated.")
+            break
+        except RuntimeError:
+            click.echo(traceback.format_exc())
+            break
+        except Exception:
+            click.echo(traceback.format_exc())
     
-    response = DISPATCH.dispatch_router(ctx=route_result)
 
-    repl(click.get_current_context())
-
-
-
-register_repl(theodore)
+    
 if __name__ == "__main__":
     theodore()

@@ -28,8 +28,7 @@ async def send_command(cmd, file_args: Iterable) -> None:
     message = json.dumps(mail_data).encode()
     header = struct.pack("!I", len(message))
 
-    await DISPATCH.dispatch_cli(func=worker.send_signal, header=header, message=message)
-    return
+    await worker.send_signal(header=header, message=message)
 
 async def resolve_file(filename):
     fullname = await get_full_name(filename)

@@ -8,13 +8,20 @@ from theodore.core.utils import DATA_DIR
 from theodore.ai.train_data import DEFAULT_TRAIN_DATA
 
 
+embeddings_dir = DATA_DIR/"vector_embeddings"
+embeddings_dir.mkdir(parents=True, exist_ok=True)
+
+embed_label_path = embeddings_dir/"cmd_labels.json"
+embed_npy_path = embeddings_dir/"cmd_embeddings.npy"
+
+
 class IntentIndex:
     def __init__(
             self,
             *, 
             model: SentenceTransformer, 
-            embeddings_path: Path | str | None = None, 
-            labels_path: Path | str | None = None, 
+            embeddings_path: Path | str | None = embed_npy_path, 
+            labels_path: Path | str | None = embed_label_path, 
             train_data: Dict[str, List[str]] = DEFAULT_TRAIN_DATA
         ):
         self.model = model
@@ -24,7 +31,7 @@ class IntentIndex:
 
         if paths:
             self.embeddings_unit_vector = np.load(str(embeddings_path))
-            self.labels = json.loads(str(labels_path))
+            self.labels = json.loads(Path(str(labels_path)).read_text())
         else:
             labels = []
             texts = []
@@ -50,13 +57,6 @@ class IntentIndex:
     def _calc_dot(self, vector) -> np.ndarray:
         unit_vector = vector/np.linalg.norm(vector)
         return self.embeddings_unit_vector @ unit_vector
-
-
-embeddings_dir = DATA_DIR/"vector_embeddings"
-embeddings_dir.mkdir(parents=True, exist_ok=True)
-
-embed_label_path = embeddings_dir/"cmd_labels.json"
-embed_npy_path = embeddings_dir/"cmd_embeddings.npy"
 
 
 if __name__ == "__main__":

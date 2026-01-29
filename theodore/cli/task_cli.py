@@ -292,5 +292,3 @@ async def restore(ctx, ids, **kwargs):
         return
     user_success(msg)
     return
-
-

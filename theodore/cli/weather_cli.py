@@ -1,7 +1,6 @@
 import click
 import rich_click as click
 import asyncio
-from pydantic import BaseModel, Field
 
 from theodore.cli.async_click import AsyncCommand
 from theodore.core.utils import base_logger, user_error, DBTasks
