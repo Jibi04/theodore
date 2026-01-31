@@ -1,7 +1,8 @@
 from concurrent.futures import CancelledError
 from pathlib import Path
 from rich.table import Table
-from theodore.core.utils import normalize_ids, user_info
+from theodore.core.utils import normalize_ids
+from theodore.core.informers import user_info
 from theodore.core.transporter import CommunicationChannel
 from theodore.core.file_helpers import *
 

@@ -1,4 +1,3 @@
-import click
 import rich_click as click
 import traceback
 import asyncio
@@ -7,7 +6,7 @@ from pydantic import ValidationError
 from datetime import datetime
 from tzlocal import get_localzone
 
-from theodore.core.utils import user_info, user_error
+from theodore.core.informers import user_info, user_error
 from theodore.cli.async_click import AsyncCommand
 from theodore.ai.dispatch import SHELL
 
@@ -55,8 +54,7 @@ async def add_git(ctx):
 
 @shell.command(cls=AsyncCommand, name="add-commit")
 @click.option("--message", "-m", type=str, required=True)
-@click.pass_context
-async def add_commit(ctx, message):
+async def add_commit(message):
     """Commit staged git files"""
     try:
         returncode = await SHELL.commit_git(message=message)
@@ -68,8 +66,7 @@ async def add_commit(ctx, message):
 
 @shell.command(cls=AsyncCommand, name="migrate-db")
 @click.option("--message", "-m", type=str, required=True)
-@click.pass_context
-async def migrate_db(ctx, message):
+async def migrate_db(message):
     """generate revision for database migration"""
     try:
         returncode = await SHELL.alembic_migrate(commit_message=message)
@@ -78,23 +75,19 @@ async def migrate_db(ctx, message):
         user_error(traceback.format_exc())
 
 @shell.command(cls=AsyncCommand, name="upgrade-migration")
-@click.option("--message", "-m", type=str, required=True)
-@click.pass_context
-async def upgrade_migration(ctx, message):
+async def upgrade_migration():
     """Implement revision"""
     try:
-        returncode = await SHELL.alembic_migrate(commit_message=message)
+        returncode = await SHELL.alembic_upgrade()
         user_info("Alembic upgrade done.") if returncode else user_error(f"Alembic upgrade failed.")
     except (ValueError):
         user_error(traceback.format_exc())
 
 
 @shell.command(cls=AsyncCommand, name="upgrade-migration")
-@click.option("--message", "-m", type=str, required=True)
-@click.pass_context
-async def downgrade_migration(ctx, message):
+async def downgrade_migration():
     try:
-        returncode = await SHELL.alembic_migrate(commit_message=message)
+        returncode = await SHELL.alembic_downgrade()
         user_info("Alembic downgrade done.") if returncode else user_error(f"Alembic downgrade failed.")
     except (ValueError):
         user_error(traceback.format_exc())

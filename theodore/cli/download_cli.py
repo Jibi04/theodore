@@ -4,12 +4,13 @@ import rich_click as click
 from sqlalchemy import Row
 from click_option_group import RequiredMutuallyExclusiveOptionGroup, optgroup
 from theodore.models.downloads import DownloadTable
-from theodore.core.utils import Downloads, user_error, user_info, DBTasks
 from theodore.cli.async_click import AsyncCommand
 from pathlib import Path
 from typing import Iterable, Any
 
-from theodore.ai.dispatch import DOWNLOADMANAGER, WORKER, DISPATCH
+from theodore.core.informers import user_error, user_info
+from theodore.core.db_operations import DBTasks, Downloads
+from theodore.ai.dispatch import DOWNLOADMANAGER, WORKER
 
 downloader = Downloads(DownloadTable)
 manager = DOWNLOADMANAGER
@@ -52,6 +53,7 @@ async def get_full_name(filename):
     
 
 async def get_file_obj(**kwargs) -> Row[Any]:
+
     with DBTasks(DownloadTable) as db_manager:
         return await db_manager.get_features(and_conditions=kwargs, first=True)
 

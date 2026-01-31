@@ -1,12 +1,12 @@
-import click
 import rich_click as click
 import asyncio
 
 from theodore.cli.async_click import AsyncCommand
-from theodore.core.utils import base_logger, user_error, DBTasks
+from theodore.core.db_operations import DBTasks
 from theodore.core.theme import console
 from theodore.ai.dispatch import WEATHER
 from theodore.models.configs import ConfigTable
+from theodore.core.informers import user_error, base_logger
 
 # def get_location():
 #     loop = asyncio.get_running_loop()

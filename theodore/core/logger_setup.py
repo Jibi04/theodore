@@ -33,7 +33,7 @@ def get_logger(name, log_file: str | None = None) -> logging.Logger:
     FILE_PATH = LOGS_DIR / (log_file or "theodore.log")
 
     # ----------- Httpx showing unwanted logs ------------
-    for noisy in ["httpx", "urllib3"]:
+    for noisy in ["httpx", "urllib3", "sentence_transformers", "sentence-transformers", "sentence-transformers/all-MiniLM-L6-v2"]:
         logging.getLogger(noisy).setLevel(logging.CRITICAL)
 
     logger = logging.getLogger(name)

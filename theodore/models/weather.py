@@ -18,7 +18,7 @@ Current = Table(
     Column("wind_kph", Float),
     Column("wind_mph", Float),
     Column("wind_dir", Float),
-    Column('time_requested', DateTime(timezone=local_tz), default=datetime.now(local_tz)),
+    Column('time_requested', DateTime(timezone=True), default=datetime.now(local_tz)),
 )
 
 Alerts = Table(
@@ -35,18 +35,18 @@ Alerts = Table(
     Column('effective', String),
     Column('description', String),
     Column('instructions', String),
-    Column('time_requested', DateTime(timezone=local_tz), default=datetime.now(local_tz)),
+    Column('time_requested', DateTime(timezone=True), default=datetime.now(local_tz)),
 )
 
 Forecasts = Table(
     'forecasts',
     meta,
     Column("country", String, primary_key=True),
-    Column('time_requested', DateTime(timezone=local_tz), default=datetime.now(local_tz)),
-    Column("sunrise", DateTime(local_tz)),
-    Column("sunset", DateTime(local_tz)),
-    Column("moonrise", DateTime(local_tz)),
-    Column("moonset", DateTime(local_tz)),
+    Column('time_requested', DateTime(timezone=True), default=datetime.now(local_tz)),
+    Column("sunrise", DateTime(True)),
+    Column("sunset", DateTime(True)),
+    Column("moonrise", DateTime(True)),
+    Column("moonset", DateTime(True)),
     Column("min_temp_c", Float),
     Column("max_temp_c", Float),
     Column("avg_temp_c", Float),

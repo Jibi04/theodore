@@ -12,13 +12,10 @@ from watchdog.events import (
 
 from theodore.core.file_helpers import resolve_path, organize
 from theodore.core.logger_setup import base_logger, error_logger, vector_perf, system_logs
-from theodore.core.utils import user_info, user_error, user_warning
+from theodore.core.informers import user_info, user_error, user_warning
 from theodore.core.time_converters import calculate_runtime_as_timestamp, get_time_difference, get_localzone
-from theodore.core.etl_helpers import transform_data
 from theodore.managers.file_manager import FileManager
 from theodore.managers.schedule_manager import ValidationError, InvalidScheduleTimeError, Job, Status
-from theodore.managers.download_manager import DownloadManager
-from theodore.managers.schedule_manager import JobManager
 
 
 TEMP_DIR = tempfile.gettempdir()
@@ -72,6 +69,9 @@ class ETL:
         **kwds
         ):
 
+        from theodore.core.etl_helpers import transform_data
+
+
         general, numeric = transform_data(path=path, save_to=save_to, **kwds)
 
         stats = {
@@ -114,6 +114,8 @@ class Dispatch:
 
 class Scheduler:
     def __init__(self):
+        from theodore.managers.schedule_manager import JobManager
+
         self._running_jobs: Dict[str, Job] = {}
         self._job_manager: JobManager = JobManager()
         self._dispatch = Dispatch()
@@ -403,6 +405,8 @@ class SystemMonitor:
 
 class Worker:
     def __init__(self):
+        from theodore.managers.download_manager import DownloadManager
+
         self.__signal = Signal(client_cb=self.handler)
         self.__dispatch = Dispatch()
         self.__scheduler = Scheduler()
@@ -454,23 +458,25 @@ class Worker:
         SERVER_STATE_FILE.unlink(missing_ok=True)
 
     async def stop_processes(self) -> None:
+        try:
 
-        await self.__dispatch.shutdown()
-        self.__monitor.stop()
-        self.__file_event_handler.stop()
-        self.__scheduler.stop()
-        self.__signal.stop()
+            await self.__dispatch.shutdown()
+            self.__monitor.stop()
+            self.__file_event_handler.stop()
+            self.__scheduler.stop()
+            self.__signal.stop()
 
-        # Await server shutdown
-        await self.signal_task
+            # Await server shutdown
+            await self.signal_task
 
-        # free blocking start-processes method
-        
-        self._worker_shutdown_event.set()
+            # free blocking start-processes method
+
+            self._worker_shutdown_event.set()
         # cleanup
-        SYS_VECTOR_FILE.unlink(missing_ok=True)
-        DF_CHANNEL.unlink(missing_ok=True)
-        SERVER_STATE_FILE.unlink(missing_ok=True)
+        finally:
+            SYS_VECTOR_FILE.unlink(missing_ok=True)
+            DF_CHANNEL.unlink(missing_ok=True)
+            SERVER_STATE_FILE.unlink(missing_ok=True)
 
     async def __parse_message(self, reader: asyncio.StreamReader) -> bytes | None:
         try:

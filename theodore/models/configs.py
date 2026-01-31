@@ -1,7 +1,5 @@
-from theodore.models.base import create_tables, meta
-from theodore.core.utils import error_logger, base_logger
+from theodore.models.base import meta
 from sqlalchemy import Table, Column, String
-import asyncio 
 
 
 ConfigTable = Table(

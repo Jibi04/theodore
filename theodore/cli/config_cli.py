@@ -1,10 +1,9 @@
 from pathlib import Path
-import click
 import rich_click as click
 from click_option_group import optgroup, RequiredMutuallyExclusiveOptionGroup, RequiredAnyOptionGroup
 from theodore.core.theme import cli_defaults, console
 from theodore.core.logger_setup import base_logger
-from theodore.core.utils import user_error, user_success
+from theodore.core.informers import user_error, user_success
 from theodore.ai.dispatch import DISPATCH, CONFIG_MANAGER
 
 cli_defaults()

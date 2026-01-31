@@ -14,9 +14,9 @@ from rich.console import Group
 from rich.rule import Rule
 from rich.align import Align
 
-from theodore.managers.daemon_manager import SYS_VECTOR_FILE, DF_CHANNEL
+from theodore.managers.daemon_manager import SYS_VECTOR_FILE, DF_CHANNEL, SERVER_STATE_FILE
 from theodore.managers.log_search import LogSearch
-from theodore.core.utils import user_info
+from theodore.core.informers import user_info
 
 # Main purpose is log search but future searches could extend data & logs
 BASEPATH = Path(__file__).parent.parent
@@ -180,7 +180,7 @@ def newDataTable() -> Tuple[Panel, Panel] | None:
 
         
 async def runDashboard():
-    if not SYS_VECTOR_FILE.exists():
+    if not SERVER_STATE_FILE.exists():
         return user_info("Cannot run dash Server not running.")
     
     layout = Layout()
@@ -269,4 +269,4 @@ async def runDashboard():
                 padding=(0, 1),
                 )
             )
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.2)

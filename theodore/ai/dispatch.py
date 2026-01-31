@@ -1,10 +1,19 @@
 import asyncio
 import inspect
 
-from theodore.ai.cmd_manager import *
 from theodore.ai.rules import RouteResult
-from theodore.core.exceptions import InvalidParamArgument, MissingParamArgument
+from theodore.core.exceptions import MissingParamArgument, InvalidParamArgument
 
+from theodore.ai.cmd_manager import (
+    ShellManager, 
+    WeatherManager, 
+    FileManager, 
+    DownloadManager, 
+    Worker, 
+    ConfigManager, 
+    runDashboard,
+    TaskManager
+    )
 
 SHELL = ShellManager()
 WEATHER = WeatherManager()
@@ -13,7 +22,6 @@ DOWNLOADMANAGER = DownloadManager()
 WORKER = Worker()
 CONFIG_MANAGER = ConfigManager()
 TASK_MANAGER = TaskManager()
-
 
 commands = {
     "SHOW-CONFIGS": {"func": CONFIG_MANAGER.show_configs},
@@ -31,61 +39,57 @@ commands = {
     "RESUME-DOWNLOAD": {"func": DOWNLOADMANAGER.resume},
     "BACKUP": {"func": SHELL.backup_files_rclone},
     "START-SERVERS": {"func": WORKER.start_processes},
-    "STOP-SERVERS": {"func": WORKER.send_signal},
+    "STOP-SERVERS": {"func": WORKER.stop_processes},
 }
-
 
 class Dispatch:
     def dispatch_router(self, ctx: RouteResult):
         intent = ctx.intent
-        if (register:=commands.get(intent)) is None:
-            raise ValueError(f"Command {intent} Not Understood")
-        
         metadata = ctx.metadata.model_dump()
-        required_metadata = {}
-        func = register["func"]
 
+        func = commands[intent]["func"]
         sig = inspect.signature(func)
+        refined_args = {}
 
         for name, param in sig.parameters.items():
             if name == "self":
                 continue
-            if name in metadata:
-                val = metadata[name]
+            annotation = param.annotation
 
-                if isinstance(val, list):
-                    if len(val) > 0:
-                        if param.annotation == list():
-                            required_metadata[name] = val
-                        else:
-                            required_metadata[name] = val[0]
-                    elif param.default is inspect.Parameter.empty:
-                        raise InvalidParamArgument(f"{func._name__} expected argument {name} but got None {val}")
-                else:
-                    required_metadata[name] = val
-                    
-            elif param.default is inspect.Parameter.empty:
-                raise MissingParamArgument(f"{func.__name__} expected argument {name} but was never extracted.")
+            val = metadata.get(name)
+            if param.default is inspect.Parameter.empty:
+                if val is None:
+                    raise MissingParamArgument(f"{intent} requires argument {name} but none was extracted.")
+                
+                # empty list or string
+                if not val and annotation is list():
+                    raise InvalidParamArgument(f"{intent} expected argument {name} with args {annotation} but got {val}")
+            
+            if val is None:
+                continue
+            elif annotation is list():
+                refined_args[name] = val
+            elif isinstance(val, list):
+                if not val: 
+                    continue
+                refined_args[name] = val[0]
+            else:
+                refined_args[name] = val
 
         if asyncio.iscoroutinefunction(func):
-            return run_async(func=func, **required_metadata)
-        return func(**required_metadata)
-
-
+            return run_async(func, **refined_args)
+        return func(**refined_args)
+        
     def dispatch_cli(self, func, **kwargs):
-        if asyncio.iscoroutinefunction(func=func):
+        if asyncio.iscoroutinefunction(func):
             return run_async(func, **kwargs)
         return func(**kwargs)
-
-
-def run_async(func, **kwargs):
-    try:
-        result = asyncio.run(func(**kwargs))
-        return result
-    except RuntimeWarning:
-        raise
     
 
+def run_async(func, **kwargs):
+    with asyncio.Runner() as runner:
+        response = runner.run(func(**kwargs))
+        return response
+
+
 DISPATCH = Dispatch()
-
-

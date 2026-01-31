@@ -1,5 +1,4 @@
 from pathlib import Path
-import click
 import rich_click as click
 from click_option_group import optgroup, RequiredMutuallyExclusiveOptionGroup
 import json

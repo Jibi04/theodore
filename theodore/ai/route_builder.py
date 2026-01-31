@@ -1,23 +1,14 @@
 from sentence_transformers import SentenceTransformer
+from theodore.ai.dispatch import DISPATCH
+from theodore.ai.rules import IntentMetadata, RouteResult, extract_entities
 
-from theodore.ai.intents import IntentIndex
-from theodore.ai.rules import RouteResult, extract_entities, IntentMetadata, CONFIDENCE_THRESHOLD
+def routeBuilder(text: str, intent: str, confidence_level: float):
+    entities = extract_entities(text)
 
-def RouteBuilder(text: str, model: SentenceTransformer) -> None | RouteResult:
-    vector = model.encode(text)
+    route_result = RouteResult(
+        intent=intent, 
+        metadata=IntentMetadata(**entities), 
+        confidence_level=confidence_level
+        )
 
-    intentCtx = IntentIndex(model=model)
-
-    intent, confidence = intentCtx.match(vector=vector)
-    if confidence < CONFIDENCE_THRESHOLD:
-        return
-
-    return RouteResult(
-        intent=intent,
-        confidence_level=confidence,
-        metadata=compile_intent_metadata(text=text)
-    )
-
-
-def compile_intent_metadata(text: str) -> IntentMetadata:
-    return IntentMetadata(**extract_entities(text))
+    return DISPATCH.dispatch_router(ctx=route_result)

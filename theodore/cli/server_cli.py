@@ -1,10 +1,9 @@
 import asyncio
-import click
 import json
 import struct
 import rich_click as click
 from theodore.cli.async_click import AsyncCommand
-from theodore.core.utils import user_info
+from theodore.core.informers import user_info
 from theodore.ai.dispatch import DISPATCH, WORKER
 
 

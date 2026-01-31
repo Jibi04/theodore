@@ -1,3 +1,7 @@
+from pathlib import Path
+import json
+from theodore.core.utils import DATA_DIR
+
 # --------------------
 # UTTERANCES
 # --------------------
@@ -117,3 +121,12 @@ DEFAULT_TRAIN_DATA = {
         "Proceed with the file acquisition"
     ]
 }
+
+TRAIN_DATA_DIR = DATA_DIR/"vector_embeddings"
+TRAIN_DATA_DIR.mkdir(exist_ok=True, parents=True)
+
+TRAIN_DATA_Path = TRAIN_DATA_DIR/"theodore_train_data.json"
+if __name__ == "__main__":
+    TRAIN_DATA_Path.write_text(json.dumps(DEFAULT_TRAIN_DATA))
+    
+    print("Done! \n", TRAIN_DATA_Path.as_posix())
