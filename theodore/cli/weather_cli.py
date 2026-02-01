@@ -1,12 +1,9 @@
 import rich_click as click
-import asyncio
 
 from theodore.cli.async_click import AsyncCommand
-from theodore.core.db_operations import DBTasks
 from theodore.core.theme import console
-from theodore.ai.dispatch import WEATHER
-from theodore.models.configs import ConfigTable
 from theodore.core.informers import user_error, base_logger
+from theodore.core.lazy import get_weather_manager, WeatherManagement
 
 # def get_location():
 #     loop = asyncio.get_running_loop()
@@ -15,11 +12,9 @@ from theodore.core.informers import user_error, base_logger
 # ============= Main Weather CLI ==============
 @click.group()
 @click.pass_context
-def weather(ctx):
+def weather(ctx: click.Context):
     """Get Live Weather Updates"""
-    config_manager = DBTasks(ConfigTable)
-    weather_defaults = asyncio.run(config_manager.get_features({'category': 'weather'}, first=True))
-    ctx.obj['default_location'] = weather_defaults.default_location
+    ctx.ensure_object(dict)
 
 
 
@@ -29,11 +24,9 @@ def weather(ctx):
 @click.option("--speed", type=click.Choice(['m', 'miles', 'km']), default='km', help='Filter weather table')
 @click.option("--clear-cache", "-clr", is_flag=True)
 @click.pass_context
-async def current(ctx, temp, location, clear_cache, speed):
+async def current(ctx: click.Context, temp, location, clear_cache, speed):
     """Get live weather updates around you"""
-
-    if not location:
-        location = ctx.obj['default_location']
+    WEATHER: WeatherManagement =get_weather_manager()
 
     response = await WEATHER.make_request(query='forecast', location=location, retries=4)
 
@@ -53,14 +46,14 @@ async def current(ctx, temp, location, clear_cache, speed):
 @click.option("--location", "-l", type=str, help="You may pass lat and lon, zipcode, postcode, city name, IP, etc")
 @click.option("--clear-cache", "-clr", is_flag=True)
 @click.pass_context
-async def forecast(ctx, temp, location, clear_cache):
+async def forecast(ctx: click.Context, temp, location, clear_cache):
     """Get future weather update up to 7 day forecasts"""
     base_logger.internal('Getting weather manager')
-    WEATHER = ctx.obj['WEATHER']
+    WEATHER: WeatherManagement = get_weather_manager()
 
     base_logger.internal('Calling make request call')
 
-    response = await WEATHER.make_request(location=location, retries=4)
+    response = await WEATHER.make_request(query="forecast", location=location, retries=4)
     if not response.get('ok'):
         base_logger.internal(f"Failed Aborting")
         user_error(response.get('message'))
@@ -79,10 +72,10 @@ async def forecast(ctx, temp, location, clear_cache):
 @click.option("--location", "-l", type=str, help="You may pass lat and lon, zipcode, postcode, city name, IP, etc")
 @click.option("--clear-cache", "-clr", is_flag=True)
 @click.pass_context
-async def alerts(ctx, location, clear_cache):
+async def alerts(ctx: click.Context, location, clear_cache):
     """Get alert for weather conditions around you"""
     base_logger.internal('Getting weather manager')
-    WEATHER = ctx.obj['WEATHER']
+    WEATHER: WeatherManagement =get_weather_manager()
 
     base_logger.internal('Calling make request call')
     response = await WEATHER.make_request(query='alerts', location=location, retries=4)

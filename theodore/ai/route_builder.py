@@ -1,8 +1,9 @@
-from sentence_transformers import SentenceTransformer
-from theodore.ai.dispatch import DISPATCH
 from theodore.ai.rules import IntentMetadata, RouteResult, extract_entities
+from theodore.core.lazy import get_dispatch
 
 def routeBuilder(text: str, intent: str, confidence_level: float):
+    DISPATCH = get_dispatch()
+    
     entities = extract_entities(text)
 
     route_result = RouteResult(

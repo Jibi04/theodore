@@ -7,15 +7,18 @@ from theodore.core.theme import console
 from theodore.core.logger_setup import base_logger
 from theodore.core.informers import send_message, user_error
 from theodore.core.db_operations import DBTasks
-from theodore.core.utils import DATA_DIR, local_tz, CurrentModel, AlertsModel, ForecastModel, WeatherModel
+from theodore.core.utils import get_weather_models
 from theodore.models.base import get_async_session
 from theodore.models.configs import ConfigTable
 from theodore.models.weather import Current, Alerts, Forecasts
 from sqlalchemy import select, or_
+from theodore.core.paths import DATA_DIR
+from theodore.core.time_converters import get_localzone
 from theodore.managers.configs_manager import ConfigManager
 from httpx import ConnectTimeout, ReadTimeout, ReadError
 from typing import Type, TypeVar
 
+WeatherModel, CurrentModel, AlertsModel, ForecastModel = get_weather_models()
 DOTENV_PATH = find_dotenv()
 load_dotenv(DOTENV_PATH)
 
@@ -51,7 +54,7 @@ class WeatherManager:
         }
 
         async with get_async_session() as session:
-            NOW = datetime.now(tz=local_tz)
+            NOW = datetime.now(tz=get_localzone())
             table = weather_map[query]
             stmt = (table
                     .where(or_(table.c.city == location, table.c.country == location))

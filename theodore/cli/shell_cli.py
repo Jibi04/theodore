@@ -1,28 +1,30 @@
 import rich_click as click
 import traceback
-import asyncio
 
-from pydantic import ValidationError
 from datetime import datetime
 from tzlocal import get_localzone
 
 from theodore.core.informers import user_info, user_error
 from theodore.cli.async_click import AsyncCommand
-from theodore.ai.dispatch import SHELL
 
+from theodore.core.lazy import get_shell_manager, ShellManagement, Asyncio, PydValidationError as ValidationError
 
 @click.group()
-def shell():
+@click.pass_context
+def shell(ctx: click.Context):
     """Perform custom, git and alembic commands."""
-    pass
+    ctx.ensure_object(dict)
+    ctx.obj['shell_manager'] = get_shell_manager()
 
 @shell.command(cls=AsyncCommand)
 @click.option("--path", "-p", required=True)
 @click.option("--drive", "-d", help="Rclone Drive name")
 @click.option("--drive-env-key", "-env-key", help="Key to env variable for drive name")
 @click.pass_context
-async def backup(ctx, path, **kwds):
+async def backup(ctx: click.Context, path, **kwds):
     """Backup files to cloud using rclone"""
+    SHELL: ShellManagement = ctx.obj['shell_manager']
+    asyncio = Asyncio()
     try:
         task = asyncio.create_task(SHELL.backup_files_rclone(directory=path, **kwds))
         user_info("Backup Initiated!")
@@ -34,8 +36,9 @@ async def backup(ctx, path, **kwds):
 @shell.command(cls=AsyncCommand, name="custom-cmd")
 @click.option("--cmd", "-c", required=True)
 @click.pass_context
-async def custom_cmd(ctx, cmd):
+async def custom_cmd(ctx: click.Context, cmd):
     """Perform custom shell commands."""
+    SHELL: ShellManagement = ctx.obj['shell_manager']
     try:
         returncode = await SHELL.custom_shell_cmd(custom_cmd=cmd)
         user_info(f"Success") if returncode else user_error(f"Custome cmd failed.")
@@ -44,8 +47,9 @@ async def custom_cmd(ctx, cmd):
 
 @shell.command(cls=AsyncCommand, name="add-git")
 @click.pass_context
-async def add_git(ctx):
+async def add_git(ctx: click.Context):
     """Stage git files for commit"""
+    SHELL: ShellManagement = ctx.obj['shell_manager']
     try:
         returncode = await SHELL.stage()
         user_info("Files Staged!") if returncode else user_error(f"File staging failed.")
@@ -54,8 +58,10 @@ async def add_git(ctx):
 
 @shell.command(cls=AsyncCommand, name="add-commit")
 @click.option("--message", "-m", type=str, required=True)
-async def add_commit(message):
+@click.pass_context
+async def add_commit(ctx: click.Context, message):
     """Commit staged git files"""
+    SHELL: ShellManagement = ctx.obj['shell_manager']
     try:
         returncode = await SHELL.commit_git(message=message)
         cmt_msg = f"Files Committed\n Msg: {message}\nDate: {datetime.now(get_localzone())}"
@@ -66,8 +72,10 @@ async def add_commit(message):
 
 @shell.command(cls=AsyncCommand, name="migrate-db")
 @click.option("--message", "-m", type=str, required=True)
-async def migrate_db(message):
+@click.pass_context
+async def migrate_db(ctx: click.Context, message):
     """generate revision for database migration"""
+    SHELL: ShellManagement = ctx.obj['shell_manager']
     try:
         returncode = await SHELL.alembic_migrate(commit_message=message)
         user_info("Alembic Migration done.") if returncode else user_error(f"Alembic Migration failed.")
@@ -75,8 +83,10 @@ async def migrate_db(message):
         user_error(traceback.format_exc())
 
 @shell.command(cls=AsyncCommand, name="upgrade-migration")
-async def upgrade_migration():
+@click.pass_context
+async def upgrade_migration(ctx: click.Context):
     """Implement revision"""
+    SHELL: ShellManagement = ctx.obj['shell_manager']
     try:
         returncode = await SHELL.alembic_upgrade()
         user_info("Alembic upgrade done.") if returncode else user_error(f"Alembic upgrade failed.")
@@ -85,7 +95,9 @@ async def upgrade_migration():
 
 
 @shell.command(cls=AsyncCommand, name="upgrade-migration")
-async def downgrade_migration():
+@click.pass_context
+async def downgrade_migration(ctx: click.Context):
+    SHELL: ShellManagement = ctx.obj['shell_manager']
     try:
         returncode = await SHELL.alembic_downgrade()
         user_info("Alembic downgrade done.") if returncode else user_error(f"Alembic downgrade failed.")

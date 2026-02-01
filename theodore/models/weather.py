@@ -1,7 +1,7 @@
 from datetime import datetime
 from sqlalchemy import Table, Column, String, Float, Integer, ForeignKey, DateTime
 from theodore.models.base import meta
-from theodore.core.utils import local_tz
+from theodore.core.time_converters import get_localzone
 
 
 Current = Table(
@@ -18,7 +18,7 @@ Current = Table(
     Column("wind_kph", Float),
     Column("wind_mph", Float),
     Column("wind_dir", Float),
-    Column('time_requested', DateTime(timezone=True), default=datetime.now(local_tz)),
+    Column('time_requested', DateTime(timezone=True), default=datetime.now(get_localzone())),
 )
 
 Alerts = Table(
@@ -35,14 +35,14 @@ Alerts = Table(
     Column('effective', String),
     Column('description', String),
     Column('instructions', String),
-    Column('time_requested', DateTime(timezone=True), default=datetime.now(local_tz)),
+    Column('time_requested', DateTime(timezone=True), default=datetime.now(get_localzone())),
 )
 
 Forecasts = Table(
     'forecasts',
     meta,
     Column("country", String, primary_key=True),
-    Column('time_requested', DateTime(timezone=True), default=datetime.now(local_tz)),
+    Column('time_requested', DateTime(timezone=True), default=datetime.now(get_localzone())),
     Column("sunrise", DateTime(True)),
     Column("sunset", DateTime(True)),
     Column("moonrise", DateTime(True)),

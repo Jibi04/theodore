@@ -7,8 +7,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from theodore.models.base import get_async_session
 from theodore.models.other_models import FileLogsTable
 from theodore.models.weather import Current, Alerts, Forecasts
-from theodore.core.utils import send_message, DATA_DIR, local_tz
 from theodore.core.logger_setup import base_logger
+from theodore.core.paths import DATA_DIR
+from theodore.core.time_converters import get_localzone
 
 
 CACHE_DIR = DATA_DIR / "cache"
@@ -138,7 +139,7 @@ class Cache_manager:
             if key in self.cache:
                 self.cache[key]['data'].update(data)
             else:
-                self.cache[key] = {"ttl_stamp": time.monotonic(), "timestamp": datetime.now(local_tz).isoformat(), f"data": data}
+                self.cache[key] = {"ttl_stamp": time.monotonic(), "timestamp": datetime.now(get_localzone()).isoformat(), f"data": data}
             
             self._save_cache()
             return send_message(True, message='Cache created')

@@ -1,28 +1,30 @@
 from pathlib import Path
 import rich_click as click
 from click_option_group import optgroup, RequiredMutuallyExclusiveOptionGroup, RequiredAnyOptionGroup
-from theodore.core.theme import cli_defaults, console
 from theodore.core.logger_setup import base_logger
 from theodore.core.informers import user_error, user_success
-from theodore.ai.dispatch import DISPATCH, CONFIG_MANAGER
+from theodore.core.lazy import get_config_manager, get_dispatch
 
-cli_defaults()
+
 
 @click.group()
 @click.pass_context
-def config(ctx):
+def config(ctx: click.Context):
     """Adjust configuration settings"""
+    ctx.ensure_object(dict)
 
 @config.command()
 @optgroup.group('required', cls=RequiredAnyOptionGroup)
 @optgroup.option("--default-location", "-l", type=str, help='Set default weather location')
-@optgroup.option("--api-key", "-api-key", type=str)
+@optgroup.option("--api-key", "-k", type=str)
 @optgroup.option("--default-path", "-p")
 @click.argument("category", type=str)
 @click.pass_context
-def set(ctx, default_location, api_key, default_path, category):
+def set(ctx: click.Context, default_location, api_key, default_path, category):
     base_logger.internal('Getting option from ctx manager')
-    args_map = ctx.params
+    DISPATCH = get_dispatch()
+    config_manager = get_config_manager()
+    args_map = {k: v for k, v in ctx.params.items() if v is not None}
 
     if default_location: default_location = default_location.strip()
 
@@ -34,7 +36,7 @@ def set(ctx, default_location, api_key, default_path, category):
         args_map['default_path'] = path_str
 
     try:
-        response = DISPATCH.dispatch_cli(CONFIG_MANAGER.upsert_category, data=args_map)
+        response = DISPATCH.dispatch_cli(config_manager.upsert_category, data=args_map)
         if not response.get('ok', None):
             user_error(response.get('message', 'An error occured whilst setting new configs please try again later'))
             return
@@ -50,9 +52,12 @@ def set(ctx, default_location, api_key, default_path, category):
 @optgroup.option("--default-path", "-p")
 @click.argument("category", type=str)
 @click.pass_context
-def update(ctx, default_location, api_key, default_path, category):
+def update(ctx: click.Context, default_location, api_key, default_path, category):
     base_logger.internal('Getting option from ctx manager')
-    args_map = ctx.params
+    DISPATCH = get_dispatch()
+    config_manager = get_config_manager()
+    args_map = {k: v for k, v in ctx.params.items() if v is not None}
+
     if default_location: default_location = default_location.strip()
 
     if default_path: 
@@ -67,7 +72,7 @@ def update(ctx, default_location, api_key, default_path, category):
     }
 
     try:
-        response = DISPATCH.dispatch_cli(CONFIG_MANAGER.upsert_category, data=cols_to_update)
+        response = DISPATCH.dispatch_cli(config_manager.upsert_category, data=cols_to_update)
         if not response.get('ok', None):
             user_error(response.get('message', 'An error occured whilst updating configs settings please try again later'))
             return
@@ -85,9 +90,13 @@ def update(ctx, default_location, api_key, default_path, category):
 @click.pass_context
 def show_configs(ctx, all, weather, downloads, todos):
     """Show category configurations"""
-    args_map = ctx.params
+    config_manager = get_config_manager()
+    from theodore.core.theme import console
+
+    args_map = {k: v for k, v in ctx.params.items() if v is not None}
+    DISPATCH = get_dispatch()
     try:
-        response = DISPATCH.dispatch_cli(CONFIG_MANAGER.show_configs, args_map=args_map)
+        response = DISPATCH.dispatch_cli(config_manager.show_configs, args_map=args_map)
         if not response.get('ok', None):
             user_error(response.get('message', 'An error occurred try again shortly'))
             return

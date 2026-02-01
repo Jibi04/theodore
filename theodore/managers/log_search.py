@@ -1,21 +1,23 @@
-import numpy as np
+# import numpy as np
 import concurrent.futures
 
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 from theodore.core.file_helpers import resolve_path
+from theodore.core.lazy import numpy, NDArray
 
 class LogSearch:
     def __init__(self, filepath, keywords: List[str], splitSize = 10):
         self.filepath = resolve_path(filepath)
         self.SplitSize = splitSize
         self._lastLocation: int = 0
-        self._cumulative: np.ndarray | None = None
+        self._cumulative: NDArray | None = None
         self._keywords = keywords
 
 
-    def getLogs(self) -> np.ndarray | None:
+    def getLogs(self) -> Optional[NDArray]:
+        np = numpy()
         if (path:=self.filepath.stat().st_size) == self._lastLocation:
             return self._cumulative
         
@@ -39,8 +41,9 @@ class LogSearch:
 
 
 
-    def searchLogs(self, startBytes, endBytes) -> List[np.ndarray]:
+    def searchLogs(self, startBytes, endBytes) -> List[NDArray]:
         innerMatrix = []
+        np = numpy()
         with self.filepath.open('rb') as f:
             chunk = endBytes - startBytes
             
@@ -85,6 +88,7 @@ def fileSplitter(filepath: Path | str, splitSize: int, start: int=0) ->  List[Tu
 
 
 if __name__ == "__main__":
+    np = numpy()
     filepath = Path("~/scripts/theodore/theodore/data/logs/errors.log").expanduser()
     KEYWORDS = ["timeout", "nonetype", "connection", "brokenpipe", "permission"]
     logs = LogSearch(keywords=KEYWORDS, filepath=filepath)

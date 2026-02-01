@@ -2,7 +2,6 @@ import logging
 from logging.handlers import RotatingFileHandler
 from rich.logging import RichHandler
 from theodore.core.theme import console
-# from theodore.core.utils import DATA_DIR
 from pathlib import Path 
 
 # ------------------------------------

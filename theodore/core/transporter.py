@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import Optional
 from rich.table import Table
 from theodore.core.theme import console
-from theodore.core.informers import user_info
 
 
 Queue = queue.Queue()

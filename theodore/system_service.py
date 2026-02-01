@@ -18,7 +18,7 @@ import subprocess
 import threading
 
 from typing import Optional
-from theodore.managers.daemon_manager import SERVER_STATE_FILE
+from theodore.core.paths import SERVER_STATE_FILE
 from theodore.core.logger_setup import base_logger, error_logger
 from theodore.core.informers import user_info, user_error
 
@@ -111,6 +111,8 @@ class SystemService:
 
         SERVER_STATE_FILE.unlink(missing_ok=True)
         self.process = None
+        self.err_thread = None
+        self.out_thread = None
 
     def _stream_reader(self, stream, tag):
         for line in iter(stream.readline, ""):

@@ -1,4 +1,4 @@
-import asyncio, heapq, getpass, json, numpy, psutil, struct, time, threading, traceback, tempfile
+import asyncio, heapq, getpass, json, psutil, struct, time, threading, traceback, tempfile, numpy
 
 from asyncio.exceptions import IncompleteReadError
 from datetime import datetime as dt, UTC
@@ -16,20 +16,16 @@ from theodore.core.informers import user_info, user_error, user_warning
 from theodore.core.time_converters import calculate_runtime_as_timestamp, get_time_difference, get_localzone
 from theodore.managers.file_manager import FileManager
 from theodore.managers.schedule_manager import ValidationError, InvalidScheduleTimeError, Job, Status
+from contextlib import suppress
 
-
-TEMP_DIR = tempfile.gettempdir()
-
-DF_CHANNEL = Path(f"{TEMP_DIR}/transformed_data.json")
-SYS_VECTOR_FILE = Path(f"{TEMP_DIR}/sys_vector.npy")
-SERVER_STATE_FILE = Path(f"{TEMP_DIR}/server_state.lock")
-WATCHER_ORGANIZER = Path("~/Downloads").expanduser().absolute()
-WATCHER_ETL_DIR = Path(__file__).parent.parent/"data"/"datasets"/"uncleaned_csv_files"
-CLEANED_ETL_DIR = Path(__file__).parent.parent/"data"/"datasets"/"cleaned_csv_files"
-
-WATCHER_ORGANIZER.mkdir(parents=True, exist_ok=True)
-CLEANED_ETL_DIR.mkdir(parents=True, exist_ok=True)
-WATCHER_ETL_DIR.mkdir(parents=True, exist_ok=True)
+from theodore.core.paths import (
+    SERVER_STATE_FILE, 
+    WATCHER_ETL_DIR, 
+    CLEANED_ETL_DIR, 
+    WATCHER_ORGANIZER, 
+    SYS_VECTOR_FILE, 
+    DF_CHANNEL
+    )
 
 
 class Signal:
@@ -467,7 +463,8 @@ class Worker:
             self.__signal.stop()
 
             # Await server shutdown
-            await self.signal_task
+            with suppress(TimeoutError):
+                await asyncio.wait_for(self.signal_task, timeout=1)
 
             # free blocking start-processes method
 

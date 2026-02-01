@@ -15,7 +15,7 @@ from tzlocal import get_localzone
 from typing import Tuple, Dict, Generator, List, Any, Iterable
 
 from theodore.core.logger_setup import base_logger, error_logger
-from theodore.core.utils import JSON_DIR
+from theodore.core.paths import JSON_DIR
 from theodore.core.informers import user_error
 
 HOME = Path.home()

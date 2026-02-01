@@ -1,4 +1,4 @@
-import numpy as np, json, asyncio
+import json
 
 from datetime import datetime as dt
 from tzlocal import get_localzone
@@ -14,9 +14,11 @@ from rich.console import Group
 from rich.rule import Rule
 from rich.align import Align
 
-from theodore.managers.daemon_manager import SYS_VECTOR_FILE, DF_CHANNEL, SERVER_STATE_FILE
+from theodore.core.paths import SYS_VECTOR_FILE, DF_CHANNEL, SERVER_STATE_FILE
 from theodore.managers.log_search import LogSearch
 from theodore.core.informers import user_info
+
+from theodore.core.lazy import numpy, Asyncio, NDArray
 
 # Main purpose is log search but future searches could extend data & logs
 BASEPATH = Path(__file__).parent.parent
@@ -51,7 +53,8 @@ units = "dim"
 title = "bold cyan"
 _default = "default"
 
-def logHealthTable(keywords: List[str], logName: str, matrix: np.ndarray) -> Table:
+def logHealthTable(keywords: List[str], logName: str, matrix: NDArray) -> Table:
+    np = numpy()
     header_style = "bold cyan" if logName == "success" else "bold red"
 
     table = Table(
@@ -71,6 +74,8 @@ def logHealthTable(keywords: List[str], logName: str, matrix: np.ndarray) -> Tab
     return table
 
 def sysHealthPanel() -> Panel | None:
+    np = numpy()
+
     if not SYS_VECTOR_FILE.exists():
         return None
     
@@ -180,6 +185,9 @@ def newDataTable() -> Tuple[Panel, Panel] | None:
 
         
 async def runDashboard():
+    np = numpy()
+    asyncio = Asyncio()
+
     if not SERVER_STATE_FILE.exists():
         return user_info("Cannot run dash Server not running.")
     

@@ -2,7 +2,7 @@ import click
 import struct
 import json
 
-from theodore.ai.dispatch import WORKER, DISPATCH
+from theodore.core.lazy import get_worker, get_dispatch
 
 class KeyValueParse(click.ParamType):
     name = "KV_PAIRS"
@@ -64,7 +64,6 @@ def schedule(
     Automate ETL tasks, File downloads File organization etc with Scheduler.
     Apscheduler API Integration comming soon.
     """
-    worker = WORKER
     package = {
         "cmd": "START-ETL",
         "file_args": ctx.params
@@ -72,4 +71,4 @@ def schedule(
     
     packed = json.dumps(package).encode()
     header = struct.pack("!I", len(packed))
-    DISPATCH.dispatch_cli(worker.send_signal, header=header, message=packed)
+    get_dispatch().dispatch_cli(get_worker().send_signal, header=header, message=packed)

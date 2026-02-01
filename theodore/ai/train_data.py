@@ -1,6 +1,5 @@
-from pathlib import Path
 import json
-from theodore.core.utils import DATA_DIR
+from theodore.core.paths import DATA_DIR
 
 # --------------------
 # UTTERANCES

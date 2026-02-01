@@ -1,20 +1,24 @@
 import json
 import struct
 import rich_click as click
-from sqlalchemy import Row
 from click_option_group import RequiredMutuallyExclusiveOptionGroup, optgroup
-from theodore.models.downloads import DownloadTable
 from theodore.cli.async_click import AsyncCommand
 from pathlib import Path
 from typing import Iterable, Any
 
 from theodore.core.informers import user_error, user_info
-from theodore.core.db_operations import DBTasks, Downloads
-from theodore.ai.dispatch import DOWNLOADMANAGER, WORKER
 
-downloader = Downloads(DownloadTable)
-manager = DOWNLOADMANAGER
-worker = WORKER
+from theodore.core.lazy import get_worker,  get_db_handler
+from functools import lru_cache
+
+@lru_cache
+def get_downloader():
+    from theodore.models.downloads import DownloadTable
+    from theodore.core.db_operations import Downloads
+    return Downloads(DownloadTable)
+
+
+
 # ------------------------------------------
 #             Main Downloads CLI 
 # ------------------------------------------
@@ -29,7 +33,7 @@ async def send_command(cmd, file_args: Iterable) -> None:
     message = json.dumps(mail_data).encode()
     header = struct.pack("!I", len(message))
 
-    await worker.send_signal(header=header, message=message)
+    await get_worker().send_signal(header=header, message=message)
 
 async def resolve_file(filename):
     fullname = await get_full_name(filename)
@@ -49,13 +53,11 @@ async def inform_client(response: dict | None = None, message: str = "") -> None
 
 
 async def get_full_name(filename):
-    return await downloader.get_full_name(filename)
+    return await get_downloader().get_full_name(filename)
     
 
-async def get_file_obj(**kwargs) -> Row[Any]:
-
-    with DBTasks(DownloadTable) as db_manager:
-        return await db_manager.get_features(and_conditions=kwargs, first=True)
+async def get_file_obj(**kwargs) -> Any :
+    return await get_db_handler().get_features(and_conditions=kwargs, first=True)
 
 @click.group()
 @click.option('--dir_path', '-p', default="~/Downloads", type=str, help='directory to save file in')
@@ -63,6 +65,8 @@ async def get_file_obj(**kwargs) -> Row[Any]:
 def downloads(ctx: click.Context, dir_path: str) -> None:
     """Download, Manage and track downloads"""
     # Group logic runs before subcommands.
+    ctx.ensure_object(dict)
+
     ctx.obj['dir_path'] = Path(dir_path).expanduser()
 
 @downloads.command(cls=AsyncCommand)
@@ -70,6 +74,8 @@ def downloads(ctx: click.Context, dir_path: str) -> None:
 @click.pass_context
 async def file_(ctx: click.Context, url: str) -> None:
     """Download, Manage and track downloads"""
+
+    downloader = get_downloader()
 
     pending_downloads = await downloader.get_undownloaded_urls()
 
@@ -85,7 +91,7 @@ async def file_(ctx: click.Context, url: str) -> None:
         # bulk insert
         entries_to_insert = [url_map for url_map in urls_to_download if url_map.get('url') not in pending_downloads]
         if entries_to_insert:
-            await downloader.bulk_insert(DownloadTable, entries_to_insert)
+            await downloader.bulk_insert(entries_to_insert)
         # -------------------------------------------------------------
         # 3. Queue Tasks and Database Insertion
         # -------------------------------------------------------------
@@ -135,6 +141,7 @@ async def pause(ctx: click.Context, filename: str):
 @click.pass_context
 async def resume(ctx: click.Context, filename: str, all):
     """Resume Paused downloads"""
+    downloader = get_downloader()
     if not all:
         data = await resolve_file(filename=filename)
         if not data:

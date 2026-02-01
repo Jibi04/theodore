@@ -1,18 +1,25 @@
 import asyncio, aiofiles
 import httpx
+import random
 from theodore.core.logger_setup import base_logger
 from theodore.managers.configs_manager import ConfigManager
-from theodore.core.utils import  local_tz
+from theodore.core.time_converters import  get_localzone
 from theodore.core.informers import user_success, user_error, user_info
 from theodore.core.db_operations import DBTasks
 from theodore.models.downloads import DownloadTable
 from datetime import datetime
-from fake_user_agent import user_agent
 from pathlib import Path
 from tqdm.asyncio import tqdm
 
 # --- Global Setup ---
-ua = user_agent()
+ua = random.choice(
+(
+    "Mozilla/5.0 (X11; Linux x86_64) ",
+    "AppleWebKit/537.36 (KHTML, like Gecko) ",
+    "Chrome/121.0.0.0 Safari/537.36"
+)
+)
+
 config_manager = ConfigManager()
 db_manager = DBTasks(DownloadTable)
 
@@ -72,7 +79,7 @@ class DownloadManager:
     async def update_client(self, filename: str, filepath: Path) -> None:
         """Updates the database entry on successful download."""
         conditions = {'filename': filename}
-        values = {"is_downloaded": True, "date_downloaded": datetime.now(local_tz)}
+        values = {"is_downloaded": True, "date_downloaded": datetime.now(get_localzone())}
         await db_manager.upsert_features(values=values, primary_key=conditions)
         user_success(f'{filename} download complete and database updated!')
         return

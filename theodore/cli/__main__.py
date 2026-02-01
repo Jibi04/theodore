@@ -1,5 +1,4 @@
 import time
-import traceback
 import rich_click as click
 
 from theodore.cli.config_cli import config
@@ -66,6 +65,7 @@ def live():
     """Interact with click in interactive Mode."""
     click.echo("This may take a minute or two. Setting up...")
     
+    import traceback
     from theodore.core.informers import user_info, user_error
     from theodore.system_service import SystemService
     from theodore.ai.intent import IntentRouter
@@ -74,9 +74,8 @@ def live():
     from theodore.ai.train_data import TRAIN_DATA_Path
     ss = SystemService(["theodore", "serve"])
 
-    model = ss.get_model()
     ss.start_processes()
-    Intent = IntentRouter(model=model, train_data=TRAIN_DATA_Path)
+    Intent = IntentRouter(train_data=TRAIN_DATA_Path)
 
     click.echo("Hi I'm Theodore.")
     try:

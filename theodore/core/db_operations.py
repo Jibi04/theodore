@@ -216,7 +216,7 @@ class Downloads:
             response = await session.execute(stmt)
             return response.scalar_one_or_none()
 
-    async def bulk_insert(self, table: Table, values: list[dict]) -> None:
+    async def bulk_insert(self, values: list[dict]) -> None:
         """
         Insert values into table
         Args:
@@ -224,7 +224,7 @@ class Downloads:
             values: key value dict objects of table column and entries
         returns None
         """
-        with DBTasks(table) as db_manager:
+        with DBTasks(self.table) as db_manager:
             await db_manager.upsert_features(values=values)
         
     async def get_full_name(self, filename):
