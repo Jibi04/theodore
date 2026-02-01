@@ -42,7 +42,7 @@ def get_instance(cls):
     return cls()
 
 
-def get_cmd(name) -> None | Any:
+def get_cmd(name, commands: dict[str, tuple[str, str | None]]) -> None | Any:
     if (entry:= commands.get(name)) is None:
         return None
     

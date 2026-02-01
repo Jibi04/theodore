@@ -1,4 +1,6 @@
 import time
+
+start =  time.perf_counter()
 import rich_click as click
 
 from theodore.cli.config_cli import config
@@ -13,6 +15,7 @@ from theodore.cli.dash_cli import dash
 from theodore.core.theme import cli_defaults
 from theodore.core.logger_setup import base_logger
 
+end = time.perf_counter()
 # ======= Theme Import instantiation ========
 cli_defaults()
 

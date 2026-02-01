@@ -1,13 +1,11 @@
 # set schedules plan trips, plan daily routines etc
 from enum import Enum
 from datetime import datetime, UTC
-from pydantic import BaseModel, Field, ConfigDict, ValidationError
-from typing import Any, Callable, Dict, List, Literal
+from pydantic import BaseModel, Field, ConfigDict, ValidationError, field_validator, model_validator
+from typing import Any, Callable, Dict, List, Literal, Annotated, Tuple
 
-from theodore.core.exceptions import *
-
-
-
+from theodore.core.exceptions import JobNotFoundError
+from theodore.ai.dispatch import resolve_module, commands
 
 
     
@@ -16,52 +14,69 @@ class Status(Enum):
     active = "active"
     inactive = "in_active"
 
+class RuntimeModel(BaseModel):
+    hour: Annotated[int | None, Field(ge=1, le=59)]
+    minute: Annotated[int | None, Field(ge=1, le=59)]
+    second: Annotated[int | None, Field(ge=1, le=59)]
+    day: Annotated[int | None, Field(ge=1, le=31)]
+    day_of_week: Annotated[int | None, Field(ge=0, le=6)]
+    week: Annotated[int | None, Field(ge=1, le=53)]
+    month: Annotated[int | None, Field(ge=1, le=12)]
+    year: Annotated[int | None, Field(max_length=4, max_digits=4)]
 
+class FunctionModel(BaseModel):
+    func_path: str | None = None
+    module: str | None = None
+    method: str | None = None
+    cls_name: str | None = None
+    func: Callable[[Any], None] | None = None
+
+    @field_validator("func_path", mode="after")
+    def extract_paths(cls, v, info):
+        if v is None:
+            return v
+        
+        try:
+            entry = resolve_module_path(name=v)
+            if entry is None:
+                raise ValueError(f"Function path {v} could not be resolved")
+        except ModuleNotFoundError:
+                raise ValueError(f"Module {v} Not Found")
+        
+        module, cls_name, method = entry
+
+        info.data["module"] = module
+        info.data["cls_name"] = cls_name
+        info.data["method"] = method
+
+        return v
+    
+    @model_validator(mode="before")
+    @classmethod
+    def validate_func(cls, data):
+        if data.get("func") is None and data.get("func_path") is None:
+            raise ValueError(f"Callable Function and Function Path cannot be None.")
+        
+        return data
 
 class Job(BaseModel):
     model_config = ConfigDict(validate_assignment=True)
-    key: Any
-    func: Callable[[Any], None]
-    next_runtime: float
+
+    key: str
     trigger: Literal["interval", "cron"]
-    runtime_registry: Dict[str, Any]
+    function_model: FunctionModel
+    runtime_model: RuntimeModel
     func_args: Dict[Any, Any] | List[Dict[str, Any]] | None = None
-    dow: int | None = None
     profiling_enabled: bool = False
     status: Status = Status.inactive
     date_created: datetime = Field(default_factory=lambda: datetime.now(UTC))
-
-
 
 class JobManager:
     def __init__(self):
         self._all_jobs: Dict[str, Job] = {}
 
-    def add_job(
-            self,
-            key: Any,
-            func: Callable[..., Any], 
-            next_runtime: float,
-            func_args: Dict[Any, Any] | None = None,
-            **extra
-        ) -> Job:
-        
-        if next_runtime is None:
-            raise InvalidScheduleTimeError("Cannot create Job without specific runtime")
-        try:
-            job = Job(
-                key=key,
-                func=func, 
-                func_args=func_args, 
-                next_runtime=next_runtime,
-                **extra
-            )
-            self._all_jobs[job.key] = job
-            return job
-        except ValidationError:
-            # Job add should catch error and log error, not crash the scheduler.
-            raise
-
+    def add_job(self, job: Job): 
+        self._all_jobs[job.key] = job
 
     def modify_job(self, key, **data):
         job = self.verify_key(key)
@@ -101,4 +116,18 @@ class JobManager:
                 return job
         return None
     
- 
+def resolve_module_path(name, commands: dict[str, tuple[str, str | None]] = commands) -> None | Tuple[str, str | None, str]:
+    if (entry:= commands.get(name)) is None:
+        return None
+    
+    target_path, method = entry
+
+    mod, _, cls_or_func = target_path.rpartition(".")
+
+    if resolve_module(mod) is None:
+        raise ModuleNotFoundError(f"Module for {name} not found")
+    
+    if method is None:
+        return (mod, None, cls_or_func)
+
+    return (mod, cls_or_func, method)

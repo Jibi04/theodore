@@ -23,7 +23,7 @@ def shell(ctx: click.Context):
 @click.pass_context
 async def backup(ctx: click.Context, path, **kwds):
     """Backup files to cloud using rclone"""
-    SHELL: ShellManagement = ctx.obj['shell_manager']
+    SHELL = get_shell_manager()
     asyncio = Asyncio()
     try:
         task = asyncio.create_task(SHELL.backup_files_rclone(directory=path, **kwds))
@@ -38,7 +38,7 @@ async def backup(ctx: click.Context, path, **kwds):
 @click.pass_context
 async def custom_cmd(ctx: click.Context, cmd):
     """Perform custom shell commands."""
-    SHELL: ShellManagement = ctx.obj['shell_manager']
+    SHELL = get_shell_manager()
     try:
         returncode = await SHELL.custom_shell_cmd(custom_cmd=cmd)
         user_info(f"Success") if returncode else user_error(f"Custome cmd failed.")
@@ -49,7 +49,7 @@ async def custom_cmd(ctx: click.Context, cmd):
 @click.pass_context
 async def add_git(ctx: click.Context):
     """Stage git files for commit"""
-    SHELL: ShellManagement = ctx.obj['shell_manager']
+    SHELL = get_shell_manager()
     try:
         returncode = await SHELL.stage()
         user_info("Files Staged!") if returncode else user_error(f"File staging failed.")
@@ -61,7 +61,7 @@ async def add_git(ctx: click.Context):
 @click.pass_context
 async def add_commit(ctx: click.Context, message):
     """Commit staged git files"""
-    SHELL: ShellManagement = ctx.obj['shell_manager']
+    SHELL = get_shell_manager()
     try:
         returncode = await SHELL.commit_git(message=message)
         cmt_msg = f"Files Committed\n Msg: {message}\nDate: {datetime.now(get_localzone())}"
@@ -75,7 +75,7 @@ async def add_commit(ctx: click.Context, message):
 @click.pass_context
 async def migrate_db(ctx: click.Context, message):
     """generate revision for database migration"""
-    SHELL: ShellManagement = ctx.obj['shell_manager']
+    SHELL = get_shell_manager()
     try:
         returncode = await SHELL.alembic_migrate(commit_message=message)
         user_info("Alembic Migration done.") if returncode else user_error(f"Alembic Migration failed.")
@@ -86,7 +86,7 @@ async def migrate_db(ctx: click.Context, message):
 @click.pass_context
 async def upgrade_migration(ctx: click.Context):
     """Implement revision"""
-    SHELL: ShellManagement = ctx.obj['shell_manager']
+    SHELL = get_shell_manager()
     try:
         returncode = await SHELL.alembic_upgrade()
         user_info("Alembic upgrade done.") if returncode else user_error(f"Alembic upgrade failed.")
@@ -97,7 +97,7 @@ async def upgrade_migration(ctx: click.Context):
 @shell.command(cls=AsyncCommand, name="upgrade-migration")
 @click.pass_context
 async def downgrade_migration(ctx: click.Context):
-    SHELL: ShellManagement = ctx.obj['shell_manager']
+    SHELL = get_shell_manager()
     try:
         returncode = await SHELL.alembic_downgrade()
         user_info("Alembic downgrade done.") if returncode else user_error(f"Alembic downgrade failed.")

@@ -1,3 +1,4 @@
+import pickle
 from theodore.models.base import meta
 from sqlalchemy import Table, Column, String, DateTime, Boolean, TIMESTAMP, BLOB
 

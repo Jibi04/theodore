@@ -1,6 +1,6 @@
 """
 
-Implementing Lazy Loading using Importlib.util.lazy_load for this modules and every other heavy modules
+Implementing Lazy Loading using Importlib for this modules and every other heavy modules
 SQLALCHEMY, PANDAS, NUMPY, SENTENCE TRANSFORMERS, HTTPX, DATEPARSER, PYDANTIC, RICH-CLICK, CLICK AND ANYIO
 
 """
@@ -17,8 +17,11 @@ if TYPE_CHECKING:
     from pydantic import ValidationError
     from sqlalchemy.exc import SQLAlchemyError
     from sentence_transformers import SentenceTransformer
+    from apscheduler.schedulers.background import BackgroundScheduler
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
     from theodore.ai.rules import RouteResult
+    from theodore.managers.schedule_manager import Job
     from theodore.managers.configs_manager import ConfigManager
     from theodore.managers.shell_manager import ShellManager
     from theodore.managers.file_manager import FileManager
@@ -26,6 +29,7 @@ if TYPE_CHECKING:
     from theodore.managers.tasks_manager import TaskManager
     from theodore.managers.weather_manager import WeatherManager
     from theodore.ai.dispatch import Dispatch
+
 
 NDArray: TypeAlias = "np.ndarray"
 DataFrame: TypeAlias = "pd.DataFrame"
@@ -42,6 +46,9 @@ TaskManagement: TypeAlias = "TaskManager"
 WeatherManagement: TypeAlias = "WeatherManager"
 RouteResults: TypeAlias = "RouteResult"
 PydValidationError: TypeAlias = "ValidationError"
+BACKGROUND_SCHEDULER: TypeAlias = "BackgroundScheduler"
+AsyncioScheduler: TypeAlias = "AsyncIOScheduler"
+ScheduleJob: TypeAlias = "Job"
 
 
 
@@ -131,6 +138,3 @@ def get_weather_manager():
 def get_db_handler(table: SQLTable):
     from theodore.core.db_operations import DBTasks
     return DBTasks(table)
-
-
-
