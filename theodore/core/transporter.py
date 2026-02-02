@@ -1,10 +1,13 @@
+import json
 import queue
+import struct
 import threading
-from dataclasses import dataclass
-from typing import Any, Optional
 from rich.table import Table
+from dataclasses import dataclass
+from typing import Optional, Iterable
+
 from theodore.core.theme import console
-from theodore.core.utils import user_info
+from theodore.core.lazy import get_worker
 
 
 Queue = queue.Queue()
@@ -14,6 +17,18 @@ class InputRequest:
     prompt: str
     response_queue: queue.Queue
     table: Optional[Table] = None
+
+async def send_command(intent: str, file_args: Optional[Iterable] = None) -> None:
+
+    mail_data = {
+        "cmd": intent,
+        "file_args": file_args or {}
+    }
+
+    message = json.dumps(mail_data).encode()
+    header = struct.pack("!I", len(message))
+
+    return await get_worker().send_signal(header=header, message=message)
 
 class CommunicationChannel:
     def __init__(self):

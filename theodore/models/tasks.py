@@ -1,7 +1,6 @@
 from sqlalchemy import Table, Column, String, Boolean, Integer, DateTime # , ForeignKey , insert, update, delete, select
-from theodore.models.base import meta , engine, create_tables
+from theodore.models.base import meta 
 from datetime import datetime, timezone
-from theodore.core.utils import base_logger, error_logger
 
 
 TasksTable = Table(

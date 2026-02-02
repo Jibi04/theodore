@@ -9,6 +9,19 @@ license = {text = "None yet"}
 packages = [
     { include = "theodore" }
 ]
+dependencies = [
+    "apscheduler>=3.11.2",
+    "click-repl>=0.3.0",
+    "fastapi[standard]>=0.128.0",
+    "faster-whisper>=1.2.1",
+    "gensim>=4.4.0",
+    "pip>=25.3",
+    "sentence-transformers>=5.2.0",
+    "sounddevice>=0.5.5",
+    "spacy>=3.8.11",
+    "spacy-lookups-data>=1.0.5",
+    "torch>=2.10.0",
+]
 
 [tool.poetry.dependencies]
 python = ">=3.11"
@@ -36,6 +49,8 @@ pydantic = {extras = ["email"], version = "^2.12.5"}
 alembic = "^1.17.2"
 watchdog = "^6.0.0"
 psutil = "^7.2.1"
+soundfile = "^0.13.1"
+scipy = "^1.17.0"
 
 [tool.poetry.scripts]
 theodore = "theodore.cli.__main__:theodore"
@@ -43,3 +58,12 @@ theodore = "theodore.cli.__main__:theodore"
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }

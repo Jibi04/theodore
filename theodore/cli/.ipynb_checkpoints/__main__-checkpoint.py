@@ -1,4 +1,3 @@
-import click
 import rich_click as click
 
 from theodore.core.theme import cli_defaults

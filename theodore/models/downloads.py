@@ -1,6 +1,5 @@
 from sqlalchemy import Column, String, DateTime, Boolean, Table, Integer
 from theodore.models.base import meta
-from theodore.core.utils import local_tz
 
 
 DownloadTable= Table(
@@ -11,5 +10,5 @@ DownloadTable= Table(
     Column('is_downloaded', Boolean, default=False),
     Column('filepath', String),
     Column('download_percentage', Integer),
-    Column('date_downloaded', DateTime(local_tz))
+    Column('date_downloaded', DateTime(True))
 )

@@ -1,19 +1,20 @@
-import click
 import rich_click as click
 from theodore.cli.async_click import AsyncCommand
 
-from dateparser import parse
-from click_option_group import optgroup, RequiredMutuallyExclusiveOptionGroup, RequiredAllOptionGroup, RequiredAnyOptionGroup
-from sqlalchemy.exc import SQLAlchemyError
-from theodore.core.utils import user_error, user_success, user_warning, user_info, get_task_table, base_logger
+from click_option_group import optgroup, RequiredMutuallyExclusiveOptionGroup, RequiredAnyOptionGroup
+from theodore.core.informers import user_error, user_success, user_info, base_logger
+from theodore.core.utils import get_task_table
 from theodore.core.theme import console
  
+from theodore.core.lazy import get_task_manager, TaskManagement, SQLERROR
 
 
 @click.group()
 @click.pass_context             
-def task_manager(ctx):
+def task_manager(ctx: click.Context):
     """Manage to-dos"""
+    ctx.ensure_object(dict)
+    ctx.obj['task_manager'] = get_task_manager()
 
 @task_manager.command(cls=AsyncCommand)
 @click.option('--title', '-t', type=str, help="task title", required=True)
@@ -24,8 +25,9 @@ def task_manager(ctx):
 @click.pass_context
 async def new(ctx, **kwargs):
     """Create new task"""
+    from dateparser import parse
     base_logger.internal('getting manager from task manager')
-    manager = ctx.obj['task_manager']
+    manager: TaskManagement = ctx.obj['task_manager']
     args_map = kwargs
 
     try: 
@@ -56,7 +58,7 @@ async def new(ctx, **kwargs):
     except TypeError:
         user_error(f"Invalid Due date")
         return
-    except SQLAlchemyError as e:
+    except SQLERROR as e:
         base_logger.internal('A Database error occurred Aborting ...')
         user_error(f"Database Error: {e}") 
         return
@@ -84,12 +86,12 @@ async def new(ctx, **kwargs):
 @optgroup.option('--title', '-t', type=str)
 @optgroup.option('--task-id', '-tid', type=int)
 @click.option('--description', '-d',type=str, help='comma separated text')
-@click.option('--status', type=click.Choice(['pending', 'in_progress', 'completed', 'not_completed']), help='task status')
+@click.option('--status', '-s', type=click.Choice(['pending', 'in_progress', 'completed', 'not_completed']), help='task status')
 @click.pass_context
 async def update(ctx, **kwargs):
     """Update task data id, title, tags, status, due date"""
     base_logger.internal('loading task manager')
-    manager = ctx.obj['task_manager']
+    manager: TaskManagement = ctx.obj['task_manager']
     base_logger.internal('updating args map')
     args_map = {key: val for key, val in kwargs.items() if val if not None}
 
@@ -133,7 +135,7 @@ async def list(ctx, all, deleted, **kwargs):
     """List task(s) by filter"""
     
     base_logger.internal('loading task manager')
-    manager = ctx.obj['task_manager']
+    manager: TaskManagement = ctx.obj['task_manager']
 
     base_logger.internal('updating task logger')
     args_map = kwargs
@@ -167,7 +169,7 @@ async def list(ctx, all, deleted, **kwargs):
 async def search(ctx, keyword):
     """Search for keyword in tags and title"""
     base_logger.internal('getting manager from ctx obj')
-    manager = ctx.obj['task_manager']
+    manager: TaskManagement = ctx.obj['task_manager']
     try:
         base_logger.internal('getting results from keyword search {keyword} task ... waiting for response from manager')
         response = await manager.search_tasks(keyword)
@@ -200,7 +202,7 @@ async def trash(ctx, **kwargs):
     """Move task(s) to trash"""
 
     base_logger.internal('loading tasks manager from ctx manager')
-    manager = ctx.obj['task_manager']
+    manager: TaskManagement = ctx.obj['task_manager']
     base_logger.debug(f'Task manager loaded {manager}')
 
     base_logger.internal('loading list ctx params')
@@ -241,7 +243,7 @@ async def trash(ctx, **kwargs):
 async def delete(ctx, **kwargs):
     """Permanently delete task(s) from bin"""
     base_logger.internal('loading tasks manager from ctx obj')
-    manager = ctx.obj['task_manager']
+    manager: TaskManagement = ctx.obj['task_manager']
     args_map = ctx.params
 
     try:
@@ -276,7 +278,7 @@ async def delete(ctx, **kwargs):
 async def restore(ctx, ids, **kwargs):
     """Restore task(s) from trash bin"""
     base_logger.internal('loading tasks manager from ctx obj')
-    manager = ctx.obj['task_manager']
+    manager: TaskManagement = ctx.obj['task_manager']
     args_map = ctx.params
     try:
         response = await manager.restore_from_trash(**args_map)
@@ -290,5 +292,3 @@ async def restore(ctx, ids, **kwargs):
         return
     user_success(msg)
     return
-
-

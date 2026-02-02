@@ -2,7 +2,6 @@ import logging
 from logging.handlers import RotatingFileHandler
 from rich.logging import RichHandler
 from theodore.core.theme import console
-# from theodore.core.utils import DATA_DIR
 from pathlib import Path 
 
 # ------------------------------------
@@ -33,7 +32,7 @@ def get_logger(name, log_file: str | None = None) -> logging.Logger:
     FILE_PATH = LOGS_DIR / (log_file or "theodore.log")
 
     # ----------- Httpx showing unwanted logs ------------
-    for noisy in ["httpx", "urllib3"]:
+    for noisy in ["httpx", "urllib3", "sentence_transformers", "sentence-transformers", "sentence-transformers/all-MiniLM-L6-v2"]:
         logging.getLogger(noisy).setLevel(logging.CRITICAL)
 
     logger = logging.getLogger(name)
@@ -60,7 +59,12 @@ def get_logger(name, log_file: str | None = None) -> logging.Logger:
     logger.addHandler(rich_handler)
 
     # ------------- File Logs ----------------
-    file_handler = RotatingFileHandler(FILE_PATH, encoding="utf-8", backupCount=3, maxBytes=2*1024*1024)
+    file_handler = RotatingFileHandler(
+        FILE_PATH, 
+        encoding="utf-8", 
+        backupCount=3, 
+        maxBytes=2*1024*1024
+        )
     file_handler.setFormatter(formatter)
     file_handler.setLevel(logging.DEBUG)  # INTERNAL logs included
     logger.addHandler(file_handler)
@@ -71,3 +75,6 @@ def get_logger(name, log_file: str | None = None) -> logging.Logger:
 
 base_logger = get_logger("theodore", "theodore.log")
 error_logger = get_logger("theodore.errors", "errors.log")
+vector_perf = get_logger("theodore.performance", "performance.log")
+system_logs = get_logger("theodore.monitor", "monitor.log")
+sys_vector_logs = get_logger("theodore.monitor_vector", "sys_vector.log")

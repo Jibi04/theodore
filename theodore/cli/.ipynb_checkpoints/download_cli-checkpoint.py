@@ -1,10 +1,7 @@
-import click
 import threading
 import rich_click as click
 
-from theodore.managers.download_manager import Downloads_manager
-from theodore.managers.configs_manager import Configs_manager
-from theodore.core.logger_setup import download_logger, error_logger, base_logger
+from theodore.core.logger_setup import base_logger
 from click_option_group import optgroup, RequiredAnyOptionGroup
 from urllib.parse import urlparse, unquote
 from pathlib import Path
@@ -42,7 +39,7 @@ def multi_download(urls, dir_path = None):
 
     configs_manager.save_file(movie_configs, movie=True)
         
-    download_logger.internal('sending request for fetch')
+    base_logger.internal('sending request for fetch')
     for t in threads:
         t.join()
 
@@ -62,7 +59,7 @@ def downloads(ctx):
 @click.pass_context
 def movie(ctx, url, dir_path, resume):
     """Download movies mkv, mp4, and zip"""
-    download_logger.internal('preparing downloads manager')
+    base_logger.internal('preparing downloads manager')
 
     manager = ctx.obj['configs_manager']
     configs = manager.load_file(config=True)
@@ -71,14 +68,14 @@ def movie(ctx, url, dir_path, resume):
     movies.setdefault("downloads", {})
     movies["downloads"].setdefault("movies", {})
 
-    download_logger.internal('preparing downloads path')
+    base_logger.internal('preparing downloads path')
 
     if not dir_path:
         dir_path = configs.get('downloads', {}).get('default_location', "~/Videos")
 
     dir_str = Path(dir_path).expanduser().absolute()
 
-    download_logger.internal('parsing url for fetch')
+    base_logger.internal('parsing url for fetch')
     manager.save_file(movies, movie=True)
 
     if resume:
@@ -86,7 +83,7 @@ def movie(ctx, url, dir_path, resume):
         movies = movies.get('downloads', {}).get('movies', {})
 
         if not movies:
-            download_logger.info('No downloads to resume')
+            base_logger.info('No downloads to resume')
             return
         
         for _, movie_data in movies.items():

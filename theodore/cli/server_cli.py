@@ -1,18 +1,16 @@
-import asyncio
-import click
 import json
 import struct
 import rich_click as click
 from theodore.cli.async_click import AsyncCommand
-from theodore.core.utils import user_info
-from theodore.managers.daemon_manager import Worker
-
-WORKER = Worker()
+from theodore.core.informers import user_info
+from theodore.core.lazy import get_worker, Asyncio
 
 @click.command(cls=AsyncCommand)
 @click.pass_context
 async def start_servers(ctx: click.Context):
     """Start Servers and processes"""
+    asyncio = Asyncio()
+    WORKER = get_worker()
     try:
         await WORKER.start_processes()
     except (asyncio.CancelledError, KeyboardInterrupt):
@@ -26,6 +24,7 @@ async def stop_servers(ctx: click.Context):
     """
     Stop all servers and Processes
     """
+    WORKER = get_worker()
     try:
         args = {"cmd": "STOP-PROCESSES", "file_args": {}}
         message = json.dumps(args).encode()

@@ -5,15 +5,20 @@ from datetime import datetime, timedelta
 from rich.table import Table
 from theodore.core.theme import console
 from theodore.core.logger_setup import base_logger
-from theodore.core.utils import send_message, DATA_DIR, user_error, DBTasks, local_tz, CurrentModel, AlertsModel, ForecastModel, WeatherModel
+from theodore.core.informers import send_message, user_error
+from theodore.core.db_operations import DBTasks
+from theodore.core.utils import get_weather_models
 from theodore.models.base import get_async_session
 from theodore.models.configs import ConfigTable
 from theodore.models.weather import Current, Alerts, Forecasts
 from sqlalchemy import select, or_
+from theodore.core.paths import DATA_DIR
+from theodore.core.time_converters import get_localzone
 from theodore.managers.configs_manager import ConfigManager
-from httpx import ConnectTimeout, ReadTimeout, ReadError, DecodingError
-from typing import Type, TypeVar, Dict
+from httpx import ConnectTimeout, ReadTimeout, ReadError
+from typing import Type, TypeVar
 
+WeatherModel, CurrentModel, AlertsModel, ForecastModel = get_weather_models()
 DOTENV_PATH = find_dotenv()
 load_dotenv(DOTENV_PATH)
 
@@ -49,7 +54,7 @@ class WeatherManager:
         }
 
         async with get_async_session() as session:
-            NOW = datetime.now(tz=local_tz)
+            NOW = datetime.now(tz=get_localzone())
             table = weather_map[query]
             stmt = (table
                     .where(or_(table.c.city == location, table.c.country == location))
@@ -102,9 +107,6 @@ class WeatherManager:
                     time.sleep(1)
                 except httpx.HTTPError:
                     continue
-                except DecodingError:
-                        base_logger.debug(f"Recieved non json-Response from Serve. {str(e)}")
-                        return send_message(False, message=f"Recieved non json-Response from server {response.status_code}")
                 except Exception as e:
                     user_error(f'{type(e).__name__} error. Aborting...')
                     return send_message(False, message=f'A  error occurred')
