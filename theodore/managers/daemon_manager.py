@@ -1,9 +1,9 @@
-import asyncio, heapq, getpass, json, psutil, struct, time, threading, traceback, tempfile, numpy
+import asyncio, heapq, getpass, json, psutil, struct, time, threading, traceback, numpy
 
 from asyncio.exceptions import IncompleteReadError
 from datetime import datetime as dt, UTC
 from pathlib import Path
-from typing import Mapping, Any, Callable, Dict, Tuple, List, Literal
+from typing import Mapping, Any, Tuple, List
 from watchdog.observers import Observer
 from watchdog.events import (
     FileClosedEvent, FileSystemEventHandler, DirMovedEvent, 
@@ -12,11 +12,8 @@ from watchdog.events import (
 
 from theodore.core.file_helpers import resolve_path, organize
 from theodore.core.logger_setup import base_logger, error_logger, vector_perf, system_logs
-from theodore.core.informers import user_info, user_error, user_warning
-from theodore.core.time_converters import calculate_runtime_as_timestamp, get_time_difference, get_localzone
+from theodore.core.informers import user_info, user_warning
 from theodore.managers.file_manager import FileManager
-from theodore.managers.schedule_manager import ValidationError, Job, Status
-from theodore.core.exceptions import InvalidScheduleTimeError
 from contextlib import suppress
 
 from theodore.core.paths import (
@@ -108,106 +105,6 @@ class Dispatch:
         for task in self.supervisor.tasks:
             task.cancel()
         return await asyncio.gather(*self.supervisor.tasks, return_exceptions=True)
-
-class Scheduler:
-    def __init__(self):
-
-
-        self._running_jobs: Dict[str, Job] = {}
-        
-        self.__scheduler_shutdown_event = asyncio.Event()
-
-    def new_job(
-            self,
-            *,
-            key: Any,
-            func: Callable[[Any], None] | None,
-            func_path: str | None,
-            module: str | None,
-            method: str | None,
-            cls_name: str | None,
-            func_args: Dict[Any, Any] | None = None,
-            trigger: Literal["cron", "interval"],
-            second: int | None = None,
-            minute: int | None = None,
-            hour: int | None = None,
-            day: int | None = None,
-            dow: int | None = None,
-            week: int | None = None,
-            month: int | None = None,
-            year: int | None = None,
-            profiling_enabled: bool = False
-        ):
-        from theodore.managers.schedule_manager import Job, FunctionModel, RuntimeModel, Status
-
-        runtime_model= RuntimeModel(
-            second=second,
-            hour=hour,
-            minute=minute,
-            day=day,
-            day_of_week=dow,
-            week=week,
-            month=month,
-            year=year
-        )
-
-        function_model = FunctionModel(
-            func_path=func_path,
-            module=module,
-            method=method,
-            cls_name=cls_name,
-            func=func
-        )
-
-        job = Job(
-            key=key,
-            trigger=trigger,
-            function_model=function_model,
-            runtime_model=runtime_model,
-            func_args=func_args,
-            profiling_enabled=profiling_enabled,
-            status=Status.inactive,
-        )
-
-        scheduler = self.schedule_job(job)
-        user_info(f"new job created! key: '{key}'")
-
-    def schedule_job(self, job: Job):
-        # trigger_func = __trigger_format__[job.trigger]
-        # trigger = trigger_func(job.runtime_model.model_dump())
-        # func = parse_function(job.function_model.model_dump())
-
-        # if is_async(func):
-        #     return schedule_async(func, trigger)
-        
-        # return schedule_sync(func, trigger)
-        pass
-        
-    def stop(self):
-        pass
-
-class Heaper:
-    def __init__(self):
-        self.heap: List[Tuple[float, Any]] = list()
-        heapq.heapify(self.heap)
-
-    def add_to_heap(self, job: Job):
-        runtime = job.next_runtime
-        key = job.key
-
-        heapq.heappush(self.heap, (runtime, key))
-
-    def peek_first(self):
-        return self.heap[0]
-
-    def get_first(self):
-        return heapq.heappop(self.heap)
-
-    def update_heap(self, runtime: float, key: Any):
-        heapq.heappushpop(self.heap, (runtime, key))
-
-    def remove(self):
-        heapq.heappop(self.heap)
 
 class Supervisor:
 
@@ -334,10 +231,11 @@ class SystemMonitor:
 class Worker:
     def __init__(self):
         from theodore.managers.download_manager import DownloadManager
+        from theodore.tests.scheduler import Scheduler
 
         self.__signal = Signal(client_cb=self.handler)
         self.__dispatch = Dispatch()
-        # self.__scheduler = Scheduler()
+        self.__scheduler = Scheduler()
         self.__monitor = SystemMonitor()
         self.__log_handler = LogsHandler()
         self.__file_event_handler = FileEventHandler()
@@ -368,10 +266,10 @@ class Worker:
             name="file-event-handler"
         )
 
-        # asyncio.create_task(
-        #     self.__scheduler.start(),
-        #     name="Scheduler"
-        # )
+        asyncio.create_task(
+            self.__scheduler.start_jobs(),
+            name="Scheduler"
+        )
 
         self.signal_task = asyncio.create_task(
             self.__signal.start(),
@@ -391,7 +289,7 @@ class Worker:
             await self.__dispatch.shutdown()
             self.__monitor.stop()
             self.__file_event_handler.stop()
-            # self.__scheduler.stop()
+            self.__scheduler.stop_jobs()
             self.__signal.stop()
 
             # Await server shutdown
@@ -488,8 +386,8 @@ class Worker:
             await writer.drain()
 
             message = await reader.read(1024)
-            user_info(message.decode())
-            return
+            # user_info(message.decode())
+            return message.decode()
         except (IncompleteReadError, InterruptedError, asyncio.CancelledError):
             user_info("A connection error occurred whilst parsing command check logs for more details.")
             self.__log_handler.inform_error_logger(

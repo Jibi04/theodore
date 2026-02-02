@@ -66,8 +66,9 @@ def schedule(
     **kwargs
     ):
     """
-    Automate ETL tasks, File downloads File organization etc with Scheduler.
-    Apscheduler API Integration comming soon.
+    
+    Automate ETL tasks, File downloads File organization etc with apscheduler.
+
     """
     package = {
         "cmd": "START-ETL",

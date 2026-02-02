@@ -35,7 +35,7 @@ def parse_date(date: str) -> dict:
 
 def get_task_table(data, deleted=False):
     table = Table()
-    table.min_width = 100
+    table.min_width = 110
     table.title = 'Tasks'
     table.show_lines = True
     

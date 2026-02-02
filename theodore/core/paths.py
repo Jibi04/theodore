@@ -1,5 +1,7 @@
+from dotenv import find_dotenv, load_dotenv
 from pathlib import Path
 import tempfile
+import os
 
 
 DATA_DIR = Path(__file__).parent.parent / "data"
@@ -23,3 +25,15 @@ CLEANED_ETL_DIR = Path(__file__).parent.parent/"data"/"datasets"/"cleaned_csv_fi
 WATCHER_ORGANIZER.mkdir(parents=True, exist_ok=True)
 CLEANED_ETL_DIR.mkdir(parents=True, exist_ok=True)
 WATCHER_ETL_DIR.mkdir(parents=True, exist_ok=True)
+
+def get_db_path():
+
+    ENV_PATH = find_dotenv()
+    load_dotenv(ENV_PATH)
+
+    db_name = os.getenv('DB_NAME')
+    BASE_DIR = Path(__file__).parent.parent.resolve()
+    DB_PATH = Path(f"{BASE_DIR}/data/{db_name}")
+    DB = f"sqlite+aiosqlite:///{DB_PATH}"
+
+    return DB

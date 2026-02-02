@@ -1,6 +1,4 @@
 import time
-
-start =  time.perf_counter()
 import rich_click as click
 
 from theodore.cli.config_cli import config
@@ -14,8 +12,9 @@ from theodore.cli.weather_cli import weather
 from theodore.cli.dash_cli import dash
 from theodore.core.theme import cli_defaults
 from theodore.core.logger_setup import base_logger
+from theodore.cli.async_click import AsyncCommand
 
-end = time.perf_counter()
+
 # ======= Theme Import instantiation ========
 cli_defaults()
 
@@ -62,6 +61,21 @@ theodore.add_command(add_git, "add")
 theodore.add_command(add_commit, "commit")
 theodore.add_command(upgrade_migration, "upgrade")
 theodore.add_command(migrate_db, "migrate")
+
+@theodore.command(cls=AsyncCommand)
+async def status():
+    """Get Theodore server Status"""
+    from theodore.core.transporter import send_command
+    from theodore.core.informers import user_info
+
+    try:
+        intent = "dadadadada"
+        await send_command(intent=intent, file_args={})
+        user_info("Theodore currently running")
+    except ConnectionRefusedError:
+        user_info("Theodore currently offline")
+
+
 
 @theodore.command()
 def live():
@@ -113,7 +127,8 @@ def live():
                     intent=intent, 
                     confidence_level=confidence
                     )
-                user_info(response)
+                if response: user_info(response)
+                time.sleep(0.1)
             except KeyboardInterrupt:
                 click.echo("\nShut down Initiated.")
                 break

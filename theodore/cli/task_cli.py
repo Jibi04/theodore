@@ -86,7 +86,7 @@ async def new(ctx, **kwargs):
 @optgroup.option('--title', '-t', type=str)
 @optgroup.option('--task-id', '-tid', type=int)
 @click.option('--description', '-d',type=str, help='comma separated text')
-@click.option('--status', type=click.Choice(['pending', 'in_progress', 'completed', 'not_completed']), help='task status')
+@click.option('--status', '-s', type=click.Choice(['pending', 'in_progress', 'completed', 'not_completed']), help='task status')
 @click.pass_context
 async def update(ctx, **kwargs):
     """Update task data id, title, tags, status, due date"""

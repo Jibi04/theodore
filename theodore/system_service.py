@@ -63,6 +63,11 @@ class SystemService:
         if self.process is None:
             raise RuntimeError("Cannot supervise process not running")
         
+        if not SERVER_STATE_FILE.exists():
+            self._cleanup()
+            user_info("Server Not running.")
+            return
+        
         while True:
             if self.shutdown_event.is_set():
                 break
