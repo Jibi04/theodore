@@ -79,6 +79,8 @@ class SystemService:
         user_info("Daemon Operations shutdown.")
 
     def _unexpected_shutdown(self):
+        assert self.process is not None
+
         rc = self.process.returncode
 
         self._cleanup()
@@ -86,7 +88,7 @@ class SystemService:
 
     def _graceful_shutdown(self, timeout=5):
         if self.process is None:
-            return
+            return self._cleanup()
         
         try:
             os.killpg(self.process.pid, signal.SIGINT)
@@ -103,6 +105,7 @@ class SystemService:
             for stream in (self.process.stderr, self.process.stdout):
                 if stream is None:
                     continue
+                stream.flush()
                 stream.close()
 
         for t in (self.err_thread, self.out_thread):
@@ -137,6 +140,4 @@ class SystemService:
         user_info("Server Started")
 
     def is_running(self):
-        if self.process is None:
-            return False
-        return True
+        return self.process is not None

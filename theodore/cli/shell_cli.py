@@ -7,7 +7,7 @@ from tzlocal import get_localzone
 from theodore.core.informers import user_info, user_error
 from theodore.cli.async_click import AsyncCommand
 
-from theodore.core.lazy import get_shell_manager, ShellManagement, Asyncio, PydValidationError as ValidationError
+from theodore.core.lazy import get_shell_manager, Asyncio, PydValidationError as ValidationError
 
 @click.group()
 @click.pass_context

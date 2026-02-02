@@ -10,6 +10,7 @@ from theodore.models.weather import Current, Alerts, Forecasts
 from theodore.core.logger_setup import base_logger
 from theodore.core.paths import DATA_DIR
 from theodore.core.time_converters import get_localzone
+from theodore.core.informers import send_message
 
 
 CACHE_DIR = DATA_DIR / "cache"
@@ -17,6 +18,8 @@ CACHE_DIR = DATA_DIR / "cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 FILE_PATH = CACHE_DIR / 'weather.cache'
+
+
 
 
 class Cache_manager:
@@ -82,7 +85,7 @@ class Cache_manager:
                 
                     query = record[2]
                     db_response = await conn.execute(query)
-                conn.commit()
+                await conn.commit()
                 return send_message(True, data=db_response.rowcount)
         except SQLAlchemyError as err:
             return send_message(False, message=f"unable to load cache {str(err)}")

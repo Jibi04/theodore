@@ -6,6 +6,12 @@ from functools import lru_cache
 from theodore.core.exceptions import MissingParamArgument, InvalidParamArgument, UnknownCommandError
 from theodore.core.lazy import Asyncio, RouteResults
 
+"""
+    for methods not in classes pass the whole path as the first argument, and None as the second 
+    else pass the full path to the class name as the first argument then the method as the second tuple pair arg.
+
+"""
+
 commands: dict[str, tuple[str, str | None]]= {
     "SHOW-CONFIGS": ("theodore.ai.cmd_manager.ConfigManager", "show_configs"),
     "SHOW-DASH": ("theodore.ai.cmd_manager.runDashboard", None),
@@ -28,7 +34,7 @@ commands: dict[str, tuple[str, str | None]]= {
     "BACKUP": ("theodore.ai.cmd_manager.ShellManager", "backup_files_rclone"),
 
     "START-SERVERS": ("theodore.ai.cmd_manager.Worker", "start_processes"),
-    "STOP-SERVERS": ("theodore.ai.cmd_manager.Worker", "stop_processes"),
+    "STOP-SERVERS": ("theodore.core.transporter.send_command", None),
 }
 
 
@@ -41,8 +47,7 @@ def resolve_module(module: str):
 def get_instance(cls):
     return cls()
 
-
-def get_cmd(name, commands: dict[str, tuple[str, str | None]]) -> None | Any:
+def get_cmd(name, commands: dict[str, tuple[str, str | None]] = commands) -> None | Any:
     if (entry:= commands.get(name)) is None:
         return None
     
@@ -59,7 +64,6 @@ def get_cmd(name, commands: dict[str, tuple[str, str | None]]) -> None | Any:
     cls = getattr(module, cls_or_func)
     instance = get_instance(cls)
     return getattr(instance, method)
-
 
 class Dispatch:
 
@@ -78,6 +82,13 @@ class Dispatch:
         
         sig = inspect.signature(func)
         refined_args = {}
+
+        # Todo: Create a classifier for 
+        # - signal tasks
+        # - simple method calls
+        # ** add extract Features
+        if intent == "STOP-SERVERS":
+            return run_async(func, intent="STOP-PROCESSES")
 
         for name, param in sig.parameters.items():
             if name == "self":
@@ -112,8 +123,7 @@ class Dispatch:
         asyncio = Asyncio()
         if asyncio.iscoroutinefunction(func):
             return run_async(func, **kwargs)
-        return func(**kwargs)
-    
+        return func(**kwargs)   
 
 def run_async(func, **kwargs):
     asyncio = Asyncio()
@@ -121,5 +131,5 @@ def run_async(func, **kwargs):
         response = runner.run(func(**kwargs))
         return response
 
-
-# DISPATCH = Dispatch()
+if __name__ == "__main__":
+    DISPATCH = Dispatch()

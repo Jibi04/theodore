@@ -15,7 +15,8 @@ from theodore.core.logger_setup import base_logger, error_logger, vector_perf, s
 from theodore.core.informers import user_info, user_error, user_warning
 from theodore.core.time_converters import calculate_runtime_as_timestamp, get_time_difference, get_localzone
 from theodore.managers.file_manager import FileManager
-from theodore.managers.schedule_manager import ValidationError, InvalidScheduleTimeError, Job, Status
+from theodore.managers.schedule_manager import ValidationError, Job, Status
+from theodore.core.exceptions import InvalidScheduleTimeError
 from contextlib import suppress
 
 from theodore.core.paths import (
@@ -110,149 +111,80 @@ class Dispatch:
 
 class Scheduler:
     def __init__(self):
-        from theodore.managers.schedule_manager import JobManager
+
 
         self._running_jobs: Dict[str, Job] = {}
-        self._job_manager: JobManager = JobManager()
-        self._dispatch = Dispatch()
-        self._heaper = Heaper()
-        self.__in_active_jobs: Dict[Any, Job] = {}
+        
         self.__scheduler_shutdown_event = asyncio.Event()
-        self.__sleep_event = asyncio.Event()
 
     def new_job(
             self,
             *,
             key: Any,
-            func: Callable[..., None],
+            func: Callable[[Any], None] | None,
+            func_path: str | None,
+            module: str | None,
+            method: str | None,
+            cls_name: str | None,
             func_args: Dict[Any, Any] | None = None,
             trigger: Literal["cron", "interval"],
-            seconds: float | str| None = "*",
-            min: float | str | None= "*",
-            hour: int | str | None = "*",
+            second: int | None = None,
+            minute: int | None = None,
+            hour: int | None = None,
+            day: int | None = None,
             dow: int | None = None,
+            week: int | None = None,
+            month: int | None = None,
+            year: int | None = None,
             profiling_enabled: bool = False
         ):
+        from theodore.managers.schedule_manager import Job, FunctionModel, RuntimeModel, Status
 
-        time_blueprint = {
-            "second": seconds,
-            "minute": min,
-            "hour": hour,
-        }
+        runtime_model= RuntimeModel(
+            second=second,
+            hour=hour,
+            minute=minute,
+            day=day,
+            day_of_week=dow,
+            week=week,
+            month=month,
+            year=year
+        )
 
-        runtime_registry = {}
-        for k, val in time_blueprint.items():
-            if val != "*" and val is not None:
-                runtime_registry[k] = val
+        function_model = FunctionModel(
+            func_path=func_path,
+            module=module,
+            method=method,
+            cls_name=cls_name,
+            func=func
+        )
 
-        runtime = calculate_runtime_as_timestamp(target=runtime_registry, dow=dow)
-        if runtime is None:
-            user_error(f"Invalid time Args. {json.dumps(runtime_registry, indent=2)}")
-            return
+        job = Job(
+            key=key,
+            trigger=trigger,
+            function_model=function_model,
+            runtime_model=runtime_model,
+            func_args=func_args,
+            profiling_enabled=profiling_enabled,
+            status=Status.inactive,
+        )
 
-        try:
-            job = self._job_manager.add_job(
-                key=key.lower(),
-                func=func,
-                func_args=func_args,
-                next_runtime=runtime,
-                trigger=trigger,
-                status=Status.active,
-                runtime_registry=runtime_registry,
-                profiling_enabled=profiling_enabled
-            )
-        except ValidationError:
-            raise
-
-        self.__in_active_jobs[key] = job
-        self._heaper.add_to_heap(job=job)
-        self.__sleep_event.set()
+        scheduler = self.schedule_job(job)
         user_info(f"new job created! key: '{key}'")
 
-    async def start(self):
-        user_info("Scheduler Running")
-        while not self.__scheduler_shutdown_event.is_set():
-            if not self._heaper.heap:
-                sleep_task = asyncio.create_task(self.__sleep_event.wait())
-                shutdown_task = asyncio.create_task(self.__scheduler_shutdown_event.wait())
+    def schedule_job(self, job: Job):
+        # trigger_func = __trigger_format__[job.trigger]
+        # trigger = trigger_func(job.runtime_model.model_dump())
+        # func = parse_function(job.function_model.model_dump())
 
-                done, pending = await asyncio.wait(
-                    [sleep_task, shutdown_task],
-                    return_when=asyncio.FIRST_COMPLETED
-                )
-                # cleanup
-                for t in pending: t.cancel()
-
-                self.__sleep_event.clear()
-                if self.__scheduler_shutdown_event.is_set(): break
-
-                if not self._heaper.heap: continue
-
-            runtime, key = self._heaper.peek_first()
-            diff = max(get_time_difference(runtime), 0)
-
-            print(f"this is runtime: {runtime}, this is now {dt.now(get_localzone()).timestamp()}")
-            if diff > 0:
-                sleep_task = asyncio.create_task(self.__sleep_event.wait())
-                shutdown_task = asyncio.create_task(self.__scheduler_shutdown_event.wait())
-
-                # Race the clock vs the signals
-                done, pending = await asyncio.wait(
-                    [sleep_task, shutdown_task],
-                    timeout=diff,
-                    return_when=asyncio.FIRST_COMPLETED
-                )
-                for t in pending: t.cancel() # Clean up
-                self.__sleep_event.clear()
-
-                if self.__scheduler_shutdown_event.is_set(): break
-                if sleep_task in done: continue
-
-            # If we reach here, the timeout expired or diff was 0: TIME TO RUN
-            job = self.__in_active_jobs.get(key)
-            if job:
-                self.start_job(job=job)
-                self._heaper.remove()
-        user_info("Scheduler Shutdown.")
-
-
-    def start_job(self, job: Job):
-        next_runtime = calculate_runtime_as_timestamp(
-                target=job.runtime_registry,
-                dow=job.dow
-                )
-
-        if next_runtime is None:
-            raise InvalidScheduleTimeError(f"Unable to understand job time parameters '{job.dow}'")
-
-        if job.trigger == "cron":
-            job.next_runtime = next_runtime
-            self._heaper.add_to_heap(job)
-            self.__sleep_event.set()
-
-
-        coro_func = job.func
-        name = f"Sheduler"
-
-        coro_func_args = job.func_args
-
-        if isinstance(coro_func_args, list):
-            self._dispatch.dispatch_many(
-                basename=name,
-                func=coro_func,
-                func_kwargs=coro_func_args
-                )
-        else:
-            self._dispatch.dispatch_one(
-                basename=name,
-                func=coro_func,
-                func_kwargs=coro_func_args
-            )
-
-        self._running_jobs[job.key] = job
-
+        # if is_async(func):
+        #     return schedule_async(func, trigger)
+        
+        # return schedule_sync(func, trigger)
+        pass
+        
     def stop(self):
-        self.__scheduler_shutdown_event.set()
+        pass
 
 class Heaper:
     def __init__(self):
@@ -405,7 +337,7 @@ class Worker:
 
         self.__signal = Signal(client_cb=self.handler)
         self.__dispatch = Dispatch()
-        self.__scheduler = Scheduler()
+        # self.__scheduler = Scheduler()
         self.__monitor = SystemMonitor()
         self.__log_handler = LogsHandler()
         self.__file_event_handler = FileEventHandler()
@@ -436,10 +368,10 @@ class Worker:
             name="file-event-handler"
         )
 
-        asyncio.create_task(
-            self.__scheduler.start(),
-            name="Scheduler"
-        )
+        # asyncio.create_task(
+        #     self.__scheduler.start(),
+        #     name="Scheduler"
+        # )
 
         self.signal_task = asyncio.create_task(
             self.__signal.start(),
@@ -459,7 +391,7 @@ class Worker:
             await self.__dispatch.shutdown()
             self.__monitor.stop()
             self.__file_event_handler.stop()
-            self.__scheduler.stop()
+            # self.__scheduler.stop()
             self.__signal.stop()
 
             # Await server shutdown
@@ -595,7 +527,7 @@ class Worker:
             raise
 
         match basename:
-            case "STOP-PROCESSES":
+            case "STOP-PROCESSES" | "STOP-SERVERS":
                 await self.stop_processes()
                 return
             case "SCHEDULER":

@@ -12,6 +12,7 @@ packages = [
 dependencies = [
     "apscheduler>=3.11.2",
     "click-repl>=0.3.0",
+    "fastapi[standard]>=0.128.0",
     "faster-whisper>=1.2.1",
     "gensim>=4.4.0",
     "pip>=25.3",
