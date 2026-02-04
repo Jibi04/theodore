@@ -1,25 +1,25 @@
-import asyncio
 import os
 import re
 import time
 import numpy
-
+import asyncio
 
 from enum import IntEnum
-from dotenv import load_dotenv, find_dotenv
 from pathlib import Path
-from pydantic import BaseModel, ValidationError
-from rich.layout import Layout
 from rich.live import Live
+from rich.layout import Layout
+from dotenv import load_dotenv, find_dotenv
+from pydantic import BaseModel, ValidationError
 from rich.progress import Progress, BarColumn, TextColumn
+
 from theodore.core.file_helpers import resolve_path
 from theodore.core.logger_setup import vector_perf
+from theodore.core.exceptions import NotAllowedError
 
 class ValidateArgs(BaseModel):
     path: str | Path
     drive: str | None
     drive_env_key: str | None
-
 
 class TaskID(IntEnum):
     Git = 1
@@ -27,7 +27,6 @@ class TaskID(IntEnum):
     Extraction = 3
     Compression = 4
     Backup = 5
-
 
 class ShellManager:
     def __init__(self) -> None:
@@ -57,14 +56,12 @@ class ShellManager:
         error_weight = len(stderr.splitlines()) if stderr.strip() else 0
         return task_id, workdone, error_weight
 
-        
-
     async def custom_shell_cmd(self, custom_cmd):
         if not isinstance(custom_cmd, str):
             raise ValueError(f"Cannot understand non string commands. {custom_cmd}")
         
         if "rm" in custom_cmd.lower():
-            return NotImplemented
+            raise NotAllowedError(f"Command '{custom_cmd}' not allowed. Contains redlisted command.")
         
         _cmd = custom_cmd.split(" ")
         return await self.runcommand(cmd=_cmd, cmd_for="custom")
@@ -153,7 +150,7 @@ async def subprocess_with_progress(cmd, description="Processing..."):
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT
+            stderr=asyncio.subprocess.STDOUT,
         )
 
         errors_decoded = []
@@ -193,3 +190,5 @@ async def subprocess_with_progress(cmd, description="Processing..."):
             ]
         ))
         return returncode
+    
+

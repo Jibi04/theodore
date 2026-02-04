@@ -12,6 +12,11 @@ TEMP_DIR.mkdir(parents=True, exist_ok=True)
 JSON_DIR.mkdir(parents=True, exist_ok=True)
 FILE = JSON_DIR / "cache.json"
 
+MODELS_PATH = DATA_DIR/"models"
+MODELS_PATH.mkdir(parents=True, exist_ok=True)
+
+TRANSFORMER_MODEL_PATH = MODELS_PATH/"all_MiniLM_L6_v2"
+
 
 TEMP_DIR = tempfile.gettempdir()
 

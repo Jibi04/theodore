@@ -231,7 +231,7 @@ class SystemMonitor:
 class Worker:
     def __init__(self):
         from theodore.managers.download_manager import DownloadManager
-        from theodore.tests.scheduler import Scheduler
+        from theodore.managers.scheduler import Scheduler
 
         self.__signal = Signal(client_cb=self.handler)
         self.__dispatch = Dispatch()

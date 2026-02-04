@@ -1,5 +1,7 @@
 import time
+start = time.perf_counter()
 import rich_click as click
+
 
 from theodore.cli.config_cli import config
 from theodore.cli.download_cli import downloads
@@ -7,13 +9,16 @@ from theodore.cli.file_cli import file_manager, organize
 from theodore.cli.schedule_cli import schedule
 from theodore.cli.server_cli import start_servers, stop_servers
 from theodore.cli.task_cli import task_manager
-from theodore.cli.shell_cli import shell, backup, add_git, add_commit, upgrade_migration, migrate_db
+from theodore.cli.shell_cli import shell, backup, add_git, commit, upgrade_migration, migrate_db
 from theodore.cli.weather_cli import weather
 from theodore.cli.dash_cli import dash
 from theodore.core.theme import cli_defaults
 from theodore.core.logger_setup import base_logger
+from theodore.core.informers import user_info
 from theodore.cli.async_click import AsyncCommand
 
+total_time = round(time.perf_counter() - start, 5)
+user_info(f"Total Import time: {total_time}")
 
 # ======= Theme Import instantiation ========
 cli_defaults()
@@ -58,7 +63,7 @@ theodore.add_command(downloads, "download")
 theodore.add_command(schedule, "schedule")
 theodore.add_command(backup, "backup")
 theodore.add_command(add_git, "add")
-theodore.add_command(add_commit, "commit")
+theodore.add_command(commit, "commit")
 theodore.add_command(upgrade_migration, "upgrade")
 theodore.add_command(migrate_db, "migrate")
 
@@ -66,7 +71,6 @@ theodore.add_command(migrate_db, "migrate")
 async def status():
     """Get Theodore server Status"""
     from theodore.core.transporter import send_command
-    from theodore.core.informers import user_info
 
     try:
         intent = "dadadadada"

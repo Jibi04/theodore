@@ -8,15 +8,16 @@ import traceback
 import threading
 import concurrent.futures
 
-from datetime import datetime
-from itertools import chain
 from pathlib import Path
+from itertools import chain
+from datetime import datetime
 from tzlocal import get_localzone
 from typing import Tuple, Dict, Generator, List, Any, Iterable
 
-from theodore.core.logger_setup import base_logger, error_logger
 from theodore.core.paths import JSON_DIR
 from theodore.core.informers import user_error
+from theodore.core.decorator import theodore_task
+from theodore.core.logger_setup import base_logger, error_logger
 
 HOME = Path.home()
 DOWNLOADS = HOME/"Downloads"
@@ -164,6 +165,7 @@ def delete_entry(src: str | Path, dst: str | Path | None = None) -> None:
     if path.is_dir(): shutil.rmtree(str(path))
 
 
+@theodore_task(name="file-organize")
 def organize(src_path: str | Path) -> None:
     validate_source(src=src_path)
 

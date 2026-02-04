@@ -7,13 +7,13 @@ from click_option_group import optgroup, RequiredAllOptionGroup
 from theodore.core.lazy import get_file_manager, get_dispatch
 from theodore.core.file_helpers import archive_folder, extract_folder, resolve_path
 
-
-
 @click.group()
 @click.pass_context
 def file_manager(ctx: click.Context):
     """Move, copy, delete and organize files and folders"""
     ctx.ensure_object(dict)
+    ctx.obj['dispatch'] = get_dispatch()
+    ctx.obj['manager'] = get_file_manager()
 
 
 
@@ -25,8 +25,8 @@ def file_manager(ctx: click.Context):
 @click.pass_context
 def move(ctx: click.Context, name, destination, all):
     """Move files and folder(s) to destinations of your choice"""
-    manager = get_file_manager()
-    DISPATCH = get_dispatch()
+    manager = ctx.obj['manager']
+    DISPATCH = ctx.obj['dispatch']
     DISPATCH.dispatch_cli(func=manager.move_file, src=name, dst=destination, all=all)
     return
 
@@ -38,8 +38,8 @@ def move(ctx: click.Context, name, destination, all):
 @click.pass_context
 def copy(ctx: click.Context, name, destination, all):
     """Move files and folder(s) to destinations of your choice"""
-    manager = get_file_manager()
-    DISPATCH = get_dispatch()
+    manager = ctx.obj['manager']
+    DISPATCH = ctx.obj['dispatch']
     DISPATCH.dispatch_cli(manager.copy_file, src=name, dst=destination, all=all)
     return
 
@@ -49,8 +49,8 @@ def copy(ctx: click.Context, name, destination, all):
 @click.pass_context
 def delete(ctx: click.Context, name, all):
     """Permanent delete files and folder(s). Cannot undo action"""
-    manager = get_file_manager()
-    DISPATCH = get_dispatch()
+    manager = ctx.obj['manager']
+    DISPATCH = ctx.obj['dispatch']
     DISPATCH.dispatch_cli(manager.delete_file, src=name, all=all)
     return
 
@@ -58,7 +58,7 @@ def delete(ctx: click.Context, name, all):
 @click.pass_context
 def undo(ctx: click.Context):
     """Undo most recent task"""
-    manager = get_file_manager()
+    manager = ctx.obj['manager']
     manager.undo_move()
     return
 
@@ -67,19 +67,19 @@ def undo(ctx: click.Context):
 @click.pass_context
 def organize(ctx: click.Context, source_dir):
     """Automate file Movement, source directory defaults to current directory."""
-    manager = get_file_manager()
-    DISPATCH = get_dispatch()
+    manager = ctx.obj['manager']
+    DISPATCH = ctx.obj['dispatch']
     DISPATCH.dispatch_cli(manager.organize_files, src=source_dir)
     return
 
 @file_manager.command()
 @click.option('--directory', '-d', type=str, help='Name of directory to list', required=True)
 @click.pass_context
-def list(ctx: click.Context, dir_name):
+def list(ctx: click.Context, directory):
     """Lists all contents of directory"""
-    manager = get_file_manager()
-    DISPATCH = get_dispatch()
-    files = DISPATCH.dispatch_cli(manager.list_all_files,target_dir=dir_name)
+    manager = ctx.obj['manager']
+    DISPATCH = ctx.obj['dispatch']
+    files = DISPATCH.dispatch_cli(manager.list_all_files,target_dir=directory)
 
     table, _ = manager.get_files_table(files)
     console.print(table)

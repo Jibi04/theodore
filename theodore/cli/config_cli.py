@@ -11,7 +11,11 @@ from theodore.core.lazy import get_config_manager, get_dispatch
 @click.pass_context
 def config(ctx: click.Context):
     """Adjust configuration settings"""
+    from theodore.core.theme import console
     ctx.ensure_object(dict)
+    ctx.obj["dispatch"] = get_dispatch()
+    ctx.obj['console'] = console
+    ctx.obj['manager'] = get_config_manager()
 
 @config.command()
 @optgroup.group('required', cls=RequiredAnyOptionGroup)
@@ -22,8 +26,8 @@ def config(ctx: click.Context):
 @click.pass_context
 def set(ctx: click.Context, default_location, api_key, default_path, category):
     base_logger.internal('Getting option from ctx manager')
-    DISPATCH = get_dispatch()
-    config_manager = get_config_manager()
+    DISPATCH = ctx.obj['dispatch']
+    config_manager = ctx.obj['manager']
     args_map = {k: v for k, v in ctx.params.items() if v is not None}
 
     if default_location: default_location = default_location.strip()
@@ -54,8 +58,8 @@ def set(ctx: click.Context, default_location, api_key, default_path, category):
 @click.pass_context
 def update(ctx: click.Context, default_location, api_key, default_path, category):
     base_logger.internal('Getting option from ctx manager')
-    DISPATCH = get_dispatch()
-    config_manager = get_config_manager()
+    DISPATCH = ctx.obj['dispatch']
+    config_manager = ctx.obj['manager']
     args_map = {k: v for k, v in ctx.params.items() if v is not None}
 
     if default_location: default_location = default_location.strip()
@@ -88,13 +92,13 @@ def update(ctx: click.Context, default_location, api_key, default_path, category
 @optgroup.option('--downloads', '-d', is_flag=True, help='show all downloads configs')
 @optgroup.option('--todos', '-t', is_flag=True, help='show all configs')
 @click.pass_context
-def show_configs(ctx, all, weather, downloads, todos):
+def show_configs(ctx: click.Context, all, weather, downloads, todos):
     """Show category configurations"""
-    config_manager = get_config_manager()
-    from theodore.core.theme import console
 
     args_map = {k: v for k, v in ctx.params.items() if v is not None}
-    DISPATCH = get_dispatch()
+    config_manager = ctx.obj['manager']
+    DISPATCH = ctx.obj['dispatch']
+    console = ctx.obj['console']
     try:
         response = DISPATCH.dispatch_cli(config_manager.show_configs, args_map=args_map)
         if not response.get('ok', None):
@@ -108,3 +112,5 @@ def show_configs(ctx, all, weather, downloads, todos):
     except Exception:
         raise
     return
+if __name__ == "__main__":
+    config()

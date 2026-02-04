@@ -91,7 +91,12 @@ def get_dispatch():
 @lru_cache
 def sentence_model():
     from sentence_transformers import SentenceTransformer
-    return  SentenceTransformer("all-MiniLM-L6-v2")
+    from theodore.core.paths import TRANSFORMER_MODEL_PATH
+
+    if not TRANSFORMER_MODEL_PATH.exists():
+        return  SentenceTransformer("all-MiniLM-L6-v2")
+    else:
+        return SentenceTransformer(str(TRANSFORMER_MODEL_PATH))
 
 
 @lru_cache

@@ -15,6 +15,7 @@ from theodore.core.lazy import get_weather_manager, WeatherManagement
 def weather(ctx: click.Context):
     """Get Live Weather Updates"""
     ctx.ensure_object(dict)
+    ctx.obj['manager'] = get_weather_manager()
 
 
 
@@ -26,7 +27,7 @@ def weather(ctx: click.Context):
 @click.pass_context
 async def current(ctx: click.Context, temp, location, clear_cache, speed):
     """Get live weather updates around you"""
-    WEATHER: WeatherManagement =get_weather_manager()
+    WEATHER: WeatherManagement = ctx.obj['manager']
 
     response = await WEATHER.make_request(query='forecast', location=location, retries=4)
 
@@ -49,7 +50,7 @@ async def current(ctx: click.Context, temp, location, clear_cache, speed):
 async def forecast(ctx: click.Context, temp, location, clear_cache):
     """Get future weather update up to 7 day forecasts"""
     base_logger.internal('Getting weather manager')
-    WEATHER: WeatherManagement = get_weather_manager()
+    WEATHER: WeatherManagement = ctx.obj['manager']
 
     base_logger.internal('Calling make request call')
 
@@ -75,7 +76,7 @@ async def forecast(ctx: click.Context, temp, location, clear_cache):
 async def alerts(ctx: click.Context, location, clear_cache):
     """Get alert for weather conditions around you"""
     base_logger.internal('Getting weather manager')
-    WEATHER: WeatherManagement =get_weather_manager()
+    WEATHER: WeatherManagement = ctx.obj['manager']
 
     base_logger.internal('Calling make request call')
     response = await WEATHER.make_request(query='alerts', location=location, retries=4)

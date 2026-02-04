@@ -15,6 +15,7 @@ dependencies = [
     "fastapi[standard]>=0.128.0",
     "faster-whisper>=1.2.1",
     "gensim>=4.4.0",
+    "jinja2>=3.1.6",
     "pip>=25.3",
     "sentence-transformers>=5.2.0",
     "sounddevice>=0.5.5",

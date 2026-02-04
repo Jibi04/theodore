@@ -35,6 +35,8 @@ commands: dict[str, tuple[str, str | None]]= {
 
     "START-SERVERS": ("theodore.ai.cmd_manager.Worker", "start_processes"),
     "STOP-SERVERS": ("theodore.core.transporter.send_command", None),
+
+    "ORGANIZE": ("theodore.core.file_helpers.organize", None)
 }
 
 
