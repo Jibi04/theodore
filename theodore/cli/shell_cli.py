@@ -49,7 +49,7 @@ async def custom_cmd(ctx: click.Context, cmd):
 @click.pass_context
 async def add_git(ctx: click.Context):
     """Stage git files for commit"""
-    SHELL = ctx.obj['manager']
+    SHELL = ctx.obj.get("manager") or get_shell_manager()
     try:
         returncode = await SHELL.stage()
         user_info("Files Staged!") if returncode else user_error(f"File staging failed.")
@@ -61,7 +61,8 @@ async def add_git(ctx: click.Context):
 @click.pass_context
 async def commit(ctx: click.Context, message):
     """Commit staged git files"""
-    SHELL = ctx.obj['manager']
+    # SHELL = ctx.obj['manager'] 
+    SHELL = ctx.obj.get("manager") or get_shell_manager()
     try:
         returncode = await SHELL.commit_git(message=message)
         cmt_msg = f"Files Committed\n Msg: {message}\nDate: {datetime.now(get_localzone())}"

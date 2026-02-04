@@ -1,20 +1,21 @@
-import asyncio, heapq, getpass, json, psutil, struct, time, threading, traceback, numpy
+import asyncio, getpass, json, psutil, struct, time, threading, traceback, numpy
 
-from asyncio.exceptions import IncompleteReadError
-from datetime import datetime as dt, UTC
 from pathlib import Path
-from typing import Mapping, Any, Tuple, List
+from contextlib import suppress
+from typing import Mapping, Any, List
+from datetime import datetime as dt, UTC
+from asyncio.exceptions import IncompleteReadError
 from watchdog.observers import Observer
 from watchdog.events import (
     FileClosedEvent, FileSystemEventHandler, DirMovedEvent, 
     FileMovedEvent, DirDeletedEvent, FileDeletedEvent, 
     )
 
+from theodore.managers.file_manager import FileManager
+from theodore.core.informers import user_info, user_warning
 from theodore.core.file_helpers import resolve_path, organize
 from theodore.core.logger_setup import base_logger, error_logger, vector_perf, system_logs
-from theodore.core.informers import user_info, user_warning
-from theodore.managers.file_manager import FileManager
-from contextlib import suppress
+from theodore.core.exceptions import MissingParamArgument
 
 from theodore.core.paths import (
     SERVER_STATE_FILE, 
@@ -32,7 +33,7 @@ class Signal:
         self.client_cb = client_cb
         self._signal_shutdown_event = asyncio.Event()
 
-    async def start(self):
+    async def start(self) -> None:
         if self.socket.exists():
             self.socket.unlink(missing_ok=True)
 
@@ -51,7 +52,7 @@ class Signal:
         self.socket.unlink(missing_ok=True)
         self._signal_shutdown_event.clear()
 
-    def stop(self):
+    def stop(self) -> None:
         self._signal_shutdown_event.set()
 
 class ETL:
@@ -61,7 +62,7 @@ class ETL:
         path: Path | str,
         save_to: Path | str = CLEANED_ETL_DIR,
         **kwds
-        ):
+        ) -> int:
 
         from theodore.core.etl_helpers import transform_data
 
@@ -80,15 +81,15 @@ class Dispatch:
     def __init__(self):
         self.supervisor = Supervisor()
 
-    def dispatch_one(self, basename,  func, func_kwargs):
+    def dispatch_one(self, basename,  func, func_kwargs) -> None:
         self._run(task_name=basename, func=func, func_kwargs=func_kwargs)
 
-    def dispatch_many(self, basename, func, func_kwargs):
+    def dispatch_many(self, basename, func, func_kwargs) -> None:
         for i, kwargs in enumerate(func_kwargs):
             task_name = f"{basename}-{i}"
             self._run(task_name, func=func, func_kwargs=kwargs)
 
-    def _run(self, task_name, func, func_kwargs):
+    def _run(self, task_name, func, func_kwargs) -> None:
         task = asyncio.create_task(
             self.supervisor.supervise(
                 func=func,
@@ -100,7 +101,7 @@ class Dispatch:
         self.supervisor.tasks.add(task)
         task.add_done_callback(self.supervisor.tasks.discard)
 
-    async def shutdown(self):
+    async def shutdown(self) -> List:
         user_info("Cleaning pending tasks...")
         for task in self.supervisor.tasks:
             task.cancel()
@@ -112,7 +113,7 @@ class Supervisor:
         self.__log_handler = LogsHandler()
         self.tasks: set[asyncio.Task] = set()
 
-    async def supervise(self, func, func_kwargs):
+    async def supervise(self, func, func_kwargs) -> None:
         task_name = "Supervisor-"
         try:
             start = time.perf_counter()
@@ -189,7 +190,7 @@ class FileEventHandler:
         self._file_organize_event = FileEventManager(user=self._user, target_folder=self._observer_target_organizer)
         self._etl_event_handler = ETLEventManager(target_path=self._observer_target_etl)
 
-    def start(self):
+    def start(self) -> None:
         user_info("Observer Running")
         self._observer.schedule(event_handler=self._file_organize_event, path=self._observer_target_organizer, recursive=True)
         self._observer.schedule(event_handler=self._etl_event_handler, path=self._observer_target_etl, recursive=True)
@@ -201,7 +202,7 @@ class FileEventHandler:
         self._observer.stop()
         user_info("Observer Stopped")
 
-    def stop(self):
+    def stop(self) -> None:
         self._watcher_shutdown_event.set()
 
 class SystemMonitor:
@@ -371,16 +372,14 @@ class Worker:
                 writer.close()
                 await writer.wait_closed()
 
-    async def send_signal(self, header: bytes, message: bytes):
+    async def send_signal(self, header: bytes, message: bytes) -> str:
         try:
             reader, writer = await asyncio.open_unix_connection(self.__signal.socket)
         except FileNotFoundError:
-            user_info("Could Not open Connections at this time. start servers so theodore can process your commands.")
-            return
+            raise
         try:
             if writer.is_closing():
-                user_info("Messenger: Cannot send messages at this time, No open Connection")
-                return
+                raise
             writer.write(header)
             writer.write(message)
             await writer.drain()
@@ -389,40 +388,40 @@ class Worker:
             # user_info(message.decode())
             return message.decode()
         except (IncompleteReadError, InterruptedError, asyncio.CancelledError):
-            user_info("A connection error occurred whilst parsing command check logs for more details.")
             self.__log_handler.inform_error_logger(
                 task_name="Messenger",
                 reason="Connection Interupted",
                 error_stack=self.__log_handler.format_error(),
                 status="Signal Not sent!"
                 )
+            raise
         except (BrokenPipeError, OSError):
-            user_info("A connection error occurred whilst parsing command check logs for more details.")
             self.__log_handler.inform_error_logger(
                 task_name="Messenger",
                 reason="BrokenPipe",
                 error_stack=self.__log_handler.format_error(),
                 status="Signal Not sent!"
                 )
+            raise
         except Exception as e:
-            user_info("An error Occurred whilst parsing command check logs for more details.")
             self.__log_handler.inform_error_logger(
                 task_name="Messenger",
                 reason=type(e).__name__,
                 error_stack=self.__log_handler.format_error(),
                 status="Signal Not sent!"
                 )
+            raise
         finally:
             if writer and not writer.is_closing():
                 writer.close()
                 await writer.wait_closed()
 
-    async def process_cmd(self, cmd_dict: Mapping[str, str], file_args):
+    async def process_cmd(self, cmd_dict: Mapping[str, str], file_args) -> None:
         # Kill-switch for all tasks
         basename = cmd_dict.get("basename")
         func = cmd_dict.get("func")
         if func is None:
-            raise
+            raise MissingParamArgument(f"Command Not resolved Func not understood")
 
         match basename:
             case "STOP-PROCESSES" | "STOP-SERVERS":

@@ -1,7 +1,7 @@
 import time
 start = time.perf_counter()
-import rich_click as click
 
+import rich_click as click
 
 from theodore.cli.config_cli import config
 from theodore.cli.download_cli import downloads
@@ -76,7 +76,7 @@ async def status():
         intent = "dadadadada"
         await send_command(intent=intent, file_args={})
         user_info("Theodore currently running")
-    except ConnectionRefusedError:
+    except (ConnectionRefusedError, FileNotFoundError, ConnectionAbortedError):
         user_info("Theodore currently offline")
 
 

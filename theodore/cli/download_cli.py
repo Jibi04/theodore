@@ -22,7 +22,7 @@ def get_downloader():
 #             Main Downloads CLI 
 # ------------------------------------------
 
-async def send_command(cmd, file_args: Iterable) -> None:
+async def send_command(cmd, file_args: Iterable) -> str:
 
     mail_data = {
         "cmd": cmd,
@@ -32,7 +32,7 @@ async def send_command(cmd, file_args: Iterable) -> None:
     message = json.dumps(mail_data).encode()
     header = struct.pack("!I", len(message))
 
-    await get_worker().send_signal(header=header, message=message)
+    return await get_worker().send_signal(header=header, message=message)
 
 async def resolve_file(filename):
     fullname = await get_full_name(filename)
@@ -90,7 +90,8 @@ async def file_(ctx: click.Context, url: str) -> None:
         # -------------------------------------------------------------
         # 3. Queue Tasks and Database Insertion
         # -------------------------------------------------------------
-        await send_command(cmd="DOWNLOAD", file_args=urls_to_download)
+        msg = await send_command(cmd="DOWNLOAD", file_args=urls_to_download)
+        user_info(msg)
     finally:
         pass
 
@@ -103,13 +104,14 @@ async def cancel(ctx: click.Context, filename: str):
     if not data:
         await inform_client(message=f"No currently downloading file with name {filename}")
         return
-    await send_command(
+    msg = await send_command(
         cmd="CANCEL", 
         file_args={
             "filename": data.filename,
             "filepath": data.filepath
             }
         )
+    user_info(msg)
 
 @downloads.command(cls=AsyncCommand)
 @click.argument('filename')
@@ -120,13 +122,14 @@ async def pause(ctx: click.Context, filename: str):
     if not data:
         await inform_client(message=f"No currently downloading file with name {filename}")
         return
-    await send_command(
+    msg = await send_command(
         cmd="PAUSE", 
         file_args={
             "filename": data.filename, 
             "filepath": data.filepath
             }
         )
+    user_info(msg)
 
 @downloads.command(cls=AsyncCommand)
 @optgroup.group(name="required field", cls=RequiredMutuallyExclusiveOptionGroup)
