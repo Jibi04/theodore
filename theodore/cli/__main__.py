@@ -3,19 +3,19 @@ start = time.perf_counter()
 
 import rich_click as click
 
-from theodore.cli.config_cli import config
-from theodore.cli.download_cli import downloads
-from theodore.cli.file_cli import file_manager, organize
-from theodore.cli.schedule_cli import schedule
-from theodore.cli.server_cli import start_servers, stop_servers
-from theodore.cli.task_cli import task_manager
-from theodore.cli.shell_cli import shell, backup, add_git, commit, upgrade_migration, migrate_db
-from theodore.cli.weather_cli import weather
 from theodore.cli.dash_cli import dash
+from theodore.cli.config_cli import config
+from theodore.cli.weather_cli import weather
 from theodore.core.theme import cli_defaults
-from theodore.core.logger_setup import base_logger
 from theodore.core.informers import user_info
+from theodore.cli.task_cli import task_manager
+from theodore.cli.schedule_cli import schedule
+from theodore.cli.download_cli import downloads
 from theodore.cli.async_click import AsyncCommand
+from theodore.core.logger_setup import base_logger
+from theodore.cli.file_cli import file_manager, organize
+from theodore.cli.server_cli import start_servers, stop_servers
+from theodore.cli.shell_cli import shell, backup, add_git, commit, upgrade_migration, migrate_db
 
 total_time = round(time.perf_counter() - start, 5)
 user_info(f"Total Import time: {total_time}")

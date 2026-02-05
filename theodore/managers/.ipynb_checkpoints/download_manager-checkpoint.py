@@ -1,35 +1,36 @@
 from theodore.core.logger_setup import base_logger, error_logger
-from theodore.managers.configs_manager import Configs_manager
 import requests
 from pathlib import Path
 from http.client import IncompleteRead
 from requests.exceptions import HTTPError, ConnectionError, ChunkedEncodingError, ConnectTimeout, ReadTimeout
 import time, sys
-from datetime import datetime, timezone
-from fake_user_agent import user_agent
+# from fake_user_agent import user_agent
 from theodore.core.utils import send_message
 # Import tqdm for progress bar management
 from tqdm.auto import tqdm
 
-ua = user_agent()
-manager = Configs_manager()
+# ua = user_agent()
 
 class Downloads_manager:
 
-    def update_client(self, filename, movies:dict, filepath):
-        base_logger.info(f'{filename} download complete!')
-        movies.setdefault('downloads', {})
-        movies['downloads'].setdefault('movies', {})
-        movies['downloads']['movies'].setdefault(filename, {})
+    def update_client(self, filename, movies:dict | str, filepath):
+        from theodore.managers.configs_manager import ConfigManager
 
-        movies['downloads']['movies'][filename].update(
-            {
-                "is_downloaded": True,
-                "date_downloaded": datetime.now(timezone.utc).isoformat(),
-                "filepath": str(filepath)
-                })
+        manager = ConfigManager()
+
+        # base_logger.info(f'{filename} download complete!')
+        # movies.setdefault('downloads', {})
+        # movies['downloads'].setdefault('movies', {})
+        # movies['downloads']['movies'].setdefault(filename, {})
+
+        # movies['downloads']['movies'][filename].update(
+        #     {
+        #         "is_downloaded": True,
+        #         "date_downloaded": datetime.now(timezone.utc).isoformat(),
+        #         "filepath": str(filepath)
+        #         })
         
-        manager.save_file(movies, movie=True)
+        # manager.save_file(movies, movie=True)
 
     def download_movie(self, url, filepath, filename=None, chunksize=8192, retries=10):
         filepath = Path(filepath).expanduser()
@@ -40,7 +41,7 @@ class Downloads_manager:
         if not filename:
             filename = filepath.name
 
-        movies = manager.load_file(movie=True)
+        # movies = manager.load_file(movie=True)
 
 
         downloaded_bytes = 0
@@ -54,7 +55,7 @@ class Downloads_manager:
         mode = 'ab' if downloaded_bytes > 0 else 'wb'
 
         with requests.Session() as session:
-            session.headers.update({"User-Agent": ua})
+            # session.headers.update({"User-Agent": ua})
 
             for attempt in range(1, retries + 1):
                 try:
@@ -105,14 +106,14 @@ class Downloads_manager:
                             if final_size != total_size:
                                 error_logger.error(f"Download finished but file size mismatch: {final_size} != {total_size}")
                                 # Re-raise an error to trigger a retry or final failure
-                                raise IncompleteRead(f"File size mismatch after download: {final_size} != {total_size}")
-                    self.update_client(filename=filename, movies=movies, filepath=filepath)
+                                raise IncompleteRead(partial=bytes(final_size), expected=total_size)
+                    self.update_client(filename=filename, movies="", filepath=filepath)
                     return
                 except HTTPError as e:
                     err_msg = str(e)
 
                     if '416 client error' in err_msg.lower():
-                        self.update_client(filename=filename, movies=movies, filepath=filepath)
+                        self.update_client(filename=filename, movies="", filepath=filepath)
                         return
                     error_logger.error(f"HTTP ERROR: ", err_msg)
                     time.sleep(30)

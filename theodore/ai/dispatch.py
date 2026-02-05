@@ -1,10 +1,14 @@
+import time
+import asyncio
 import inspect
 import importlib
 from typing import Any
 from functools import lru_cache
 
+from theodore.core.lazy import RouteResults
+from theodore.core.logger_setup import vector_perf
+from theodore.core.informers import LogsHandler, user_info
 from theodore.core.exceptions import MissingParamArgument, InvalidParamArgument, UnknownCommandError
-from theodore.core.lazy import Asyncio, RouteResults
 
 """
     for methods not in classes pass the whole path as the first argument, and None as the second 
@@ -68,9 +72,11 @@ def get_cmd(name, commands: dict[str, tuple[str, str | None]] = commands) -> Non
     return getattr(instance, method)
 
 class Dispatch:
+    def __init__(self):
+        self.supervisor = Supervisor()
 
     def dispatch_router(self, ctx: RouteResults):
-        asyncio = Asyncio()
+        
 
         intent = ctx.intent
         metadata = ctx.metadata.model_dump()
@@ -122,13 +128,83 @@ class Dispatch:
         return func(**refined_args)
         
     def dispatch_cli(self, func, **kwargs):
-        asyncio = Asyncio()
+        
         if asyncio.iscoroutinefunction(func):
             return run_async(func, **kwargs)
         return func(**kwargs)   
+    
+    def dispatch_one(self, basename,  func, func_kwargs) -> None:
+        self._run(task_name=basename, func=func, func_kwargs=func_kwargs)
+
+    def dispatch_many(self, basename, func, func_kwargs) -> None:
+        for i, kwargs in enumerate(func_kwargs):
+            task_name = f"{basename}-{i}"
+            self._run(task_name, func=func, func_kwargs=kwargs)
+
+    def _run(self, task_name, func, func_kwargs) -> None:
+        
+        task = asyncio.create_task(
+            self.supervisor.supervise(
+                func=func,
+                func_kwargs=func_kwargs
+            ),
+            name=task_name
+        )
+
+        self.supervisor.tasks.add(task)
+        task.add_done_callback(self.supervisor.tasks.discard)
+
+    def shutdown(self):
+        user_info("Cleaning up running and pending tasks.")
+        for task in self.supervisor.tasks:
+            task.cancel()
+
+        return asyncio.gather(*self.supervisor.tasks, return_exceptions=True)
+    
+class Supervisor:
+
+    def __init__(self):
+        self.__log_handler = LogsHandler()
+        self.tasks: set[asyncio.Task] = set()
+
+    async def supervise(self, func, func_kwargs) -> None:
+        task_name = "Supervisor-"
+        try:
+            start = time.perf_counter()
+            if asyncio.iscoroutinefunction(func):
+                result = await func(**func_kwargs)
+            else:
+                result = func(**func_kwargs)
+            stop = time.perf_counter()
+            vector_perf.internal(numpy.array([1, stop - start]))
+
+            current_task = asyncio.current_task()
+            if current_task:
+                task_name = current_task.get_name()
+            user_info(f"Supervisor: Task done - {result} took: {round(time.perf_counter() - start, 2)}s")
+            self.__log_handler.inform_base_logger(
+                task_name=task_name,
+                status="Completed",
+                task_response=result
+            )
+        except asyncio.CancelledError:
+            self.__log_handler.inform_error_logger(
+                task_name=task_name,
+                error_stack=self.__log_handler.format_error(),
+                reason="Task Cancelled"
+            )
+            raise
+        except (OSError, RuntimeError) as e:
+            self.__log_handler.inform_error_logger(
+                task_name=task_name,
+                error_stack=self.__log_handler.format_error(),
+                reason=type(e).__name__
+            )
+            raise
+        except Exception as e:
+            raise
 
 def run_async(func, **kwargs):
-    asyncio = Asyncio()
     with asyncio.Runner() as runner:
         response = runner.run(func(**kwargs))
         return response

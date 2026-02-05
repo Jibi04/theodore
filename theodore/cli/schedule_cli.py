@@ -1,8 +1,7 @@
 import click
-import struct
-import json
 
-from theodore.core.lazy import get_worker, get_dispatch
+from theodore.cli.async_click import AsyncCommand
+from theodore.core.transporter import send_command
 
 class KeyValueParse(click.ParamType):
     """
@@ -51,7 +50,7 @@ class Dtype(click.ParamType):
 KV_PAIRS = KeyValueParse()
 DEFAULT_TYPE = Dtype()
 
-@click.command()
+@click.command(cls=AsyncCommand)
 @click.option("--key", "-k", required=True, type=str)
 @click.option("--func_args", "--args", type=KV_PAIRS, help="key=value comma separated arguments 'key1=val1,key2=val2'")
 @click.option("--func_path", "-p", type=str)
@@ -66,7 +65,7 @@ DEFAULT_TYPE = Dtype()
 @click.option("--day", "-d", type=int)
 @click.option("--profiling_enabled", is_flag=True, default=True)
 @click.pass_context
-def schedule(
+async def schedule(
     ctx: click.Context,
     **kwargs
     ):
@@ -76,10 +75,8 @@ def schedule(
 
     """
     package = {
-        "cmd": "START-ETL",
+        "intent": "START-ETL",
         "file_args": ctx.params
     }
-    
-    packed = json.dumps(package).encode()
-    header = struct.pack("!I", len(packed))
-    get_dispatch().dispatch_cli(get_worker().send_signal, header=header, message=packed)
+
+    await send_command(**package)    

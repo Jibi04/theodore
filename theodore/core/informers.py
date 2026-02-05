@@ -5,12 +5,35 @@ Calling UTILS imports so many large modules and just to inform a client is absur
 
 """
 
-from datetime import datetime
+import traceback
 from typing import Any
+from datetime import datetime
 from theodore.core.logger_setup import base_logger, error_logger
 
 
+class LogsHandler:
 
+    def format_error(self) -> str:
+        return traceback.format_exc()
+
+    def inform_error_logger(self, task_name, error_stack, reason, status: str = "Cancelled"):
+        error_logger.internal(
+                f"""
+Task Name: {task_name}
+status: {status}
+Reason: {reason}
+Error stack: {error_stack}
+                """
+            )
+
+    def inform_base_logger(self, task_name: str, task_response: Any, status):
+        base_logger.internal(
+        f"""
+Task Name: {task_name}
+status: {status}
+Task response: {task_response}
+                """)
+        
 def user_success(msg: str):
     return base_logger.info(f'[success]{msg}')
 

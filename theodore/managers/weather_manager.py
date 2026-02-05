@@ -1,4 +1,4 @@
-import fake_user_agent
+# import fake_user_agent
 import httpx, time, os
 from dotenv import load_dotenv, find_dotenv
 from datetime import datetime, timedelta
@@ -23,7 +23,7 @@ DOTENV_PATH = find_dotenv()
 load_dotenv(DOTENV_PATH)
 
 configs = ConfigManager()
-ua = fake_user_agent.user_agent()
+# ua = fake_user_agent.user_agent()
 manager = ConfigManager()
 
 CACHE_DIR = DATA_DIR / "cache"
@@ -91,9 +91,7 @@ class WeatherManager:
                         "q": location,
                         "key": API_KEY,
                     }
-                    headers = {
-                        "User-Agent": ua
-                    }
+                    headers = {}
                     base_logger.debug(f'making {query} request for {location}')
                     async with httpx.AsyncClient(timeout=30) as client:
                         base_logger.internal('awaiting response from client')

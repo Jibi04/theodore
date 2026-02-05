@@ -1,14 +1,13 @@
-import json
-import struct
+from typing import Any
 from pathlib import Path
 import rich_click as click
 from functools import lru_cache
-from typing import Iterable, Any
 from click_option_group import RequiredMutuallyExclusiveOptionGroup, optgroup
 
+from theodore.core.lazy import get_db_handler
 from theodore.cli.async_click import AsyncCommand
+from theodore.core.transporter import send_command
 from theodore.core.informers import user_error, user_info
-from theodore.core.lazy import get_worker,  get_db_handler
 
 @lru_cache
 def get_downloader():
@@ -17,22 +16,10 @@ def get_downloader():
     return Downloads(DownloadTable)
 
 
-
 # ------------------------------------------
 #             Main Downloads CLI 
 # ------------------------------------------
 
-async def send_command(cmd, file_args: Iterable) -> str:
-
-    mail_data = {
-        "cmd": cmd,
-        "file_args": file_args
-    }
-
-    message = json.dumps(mail_data).encode()
-    header = struct.pack("!I", len(message))
-
-    return await get_worker().send_signal(header=header, message=message)
 
 async def resolve_file(filename):
     fullname = await get_full_name(filename)
@@ -90,7 +77,7 @@ async def file_(ctx: click.Context, url: str) -> None:
         # -------------------------------------------------------------
         # 3. Queue Tasks and Database Insertion
         # -------------------------------------------------------------
-        msg = await send_command(cmd="DOWNLOAD", file_args=urls_to_download)
+        msg = await send_command(intent="DOWNLOAD", file_args=urls_to_download)
         user_info(msg)
     finally:
         pass
@@ -105,7 +92,7 @@ async def cancel(ctx: click.Context, filename: str):
         await inform_client(message=f"No currently downloading file with name {filename}")
         return
     msg = await send_command(
-        cmd="CANCEL", 
+        intent="CANCEL", 
         file_args={
             "filename": data.filename,
             "filepath": data.filepath
@@ -123,7 +110,7 @@ async def pause(ctx: click.Context, filename: str):
         await inform_client(message=f"No currently downloading file with name {filename}")
         return
     msg = await send_command(
-        cmd="PAUSE", 
+        intent="PAUSE", 
         file_args={
             "filename": data.filename, 
             "filepath": data.filepath
@@ -145,7 +132,7 @@ async def resume(ctx: click.Context, filename: str, all):
             await inform_client(message=f"No currently downloading file with name {filename}")
             return
         await send_command(
-            cmd="RESUME", 
+            intent="RESUME", 
             file_args={
                 "filename": data.filename, 
                 "filepath": data.filepath
@@ -157,7 +144,7 @@ async def resume(ctx: click.Context, filename: str, all):
         await inform_client(message="There are no pending downloads to continue.")
         return
     url_info = [ downloader.parse_url(url) for url in resumable_downloads ]
-    await send_command(cmd="DOWNLOAD", file_args=url_info)
+    await send_command(intent="DOWNLOAD", file_args=url_info)
 
 @downloads.command(cls=AsyncCommand)
 @click.argument('filename')

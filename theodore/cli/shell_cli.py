@@ -61,7 +61,6 @@ async def add_git(ctx: click.Context):
 @click.pass_context
 async def commit(ctx: click.Context, message):
     """Commit staged git files"""
-    # SHELL = ctx.obj['manager'] 
     SHELL = ctx.obj.get("manager") or get_shell_manager()
     try:
         returncode = await SHELL.commit_git(message=message)

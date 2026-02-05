@@ -1,6 +1,6 @@
+from typing import Literal
 from fastapi import FastAPI, Request, BackgroundTasks
 from theodore.core.state import TheodoreState, lifespan
-from typing import Literal
 
 theodore = FastAPI(lifespan=lifespan)
 
@@ -35,7 +35,7 @@ async def new_job(
         day=day,
         func_args=kwargs
     )
-    return "Task created"
+    return f"{key} Task created."
 
 @theodore.api_route("/jobs/start", methods=["GET", "POST"])
 async def start(request: Request, background_tasks: BackgroundTasks):
@@ -44,4 +44,10 @@ async def start(request: Request, background_tasks: BackgroundTasks):
     background_tasks.add_task(scheduler.start_jobs)
     return "Jobs started"
 
-    
+
+@theodore.get("/sessions/new")
+async def get_session(request: Request):
+    state: TheodoreState = request.app.state.internals
+    await state.get_session()
+    return "Yep We've got it"
+

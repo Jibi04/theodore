@@ -4,11 +4,10 @@ import struct
 import threading
 from rich.table import Table
 from dataclasses import dataclass
-from typing import Optional, Iterable
+from typing import Optional, Iterable, Any
 
 from theodore.core.theme import console
-from theodore.core.lazy import get_worker
-
+from theodore.core.paths import SOCKET_PATH
 
 Queue = queue.Queue()
 
@@ -18,7 +17,7 @@ class InputRequest:
     response_queue: queue.Queue
     table: Optional[Table] = None
 
-async def send_command(intent: str, file_args: Optional[Iterable] = None) -> None:
+async def send_command(intent: str, file_args: Optional[Iterable] = None) -> Any:
 
     mail_data = {
         "cmd": intent,
@@ -28,7 +27,57 @@ async def send_command(intent: str, file_args: Optional[Iterable] = None) -> Non
     message = json.dumps(mail_data).encode()
     header = struct.pack("!I", len(message))
 
-    return await get_worker().send_signal(header=header, message=message)
+    return await send_signal(header=header, message=message)
+
+async def send_signal(header: bytes, message: bytes) -> str:
+        import asyncio
+        from asyncio.exceptions import IncompleteReadError
+        from theodore.core.informers import LogsHandler
+
+        log_handler = LogsHandler()
+        
+        try:
+            reader, writer = await asyncio.open_unix_connection(SOCKET_PATH)
+        except FileNotFoundError:
+            raise
+        try:
+            if writer.is_closing():
+                raise
+            writer.write(header)
+            writer.write(message)
+            await writer.drain()
+
+            message = await reader.read(1024)
+            # user_info(message.decode())
+            return message.decode()
+        except (IncompleteReadError, InterruptedError, asyncio.CancelledError):
+            log_handler.inform_error_logger(
+                task_name="Messenger",
+                reason="Connection Interupted",
+                error_stack=log_handler.format_error(),
+                status="Signal Not sent!"
+                )
+            raise
+        except (BrokenPipeError, OSError):
+            log_handler.inform_error_logger(
+                task_name="Messenger",
+                reason="BrokenPipe",
+                error_stack=log_handler.format_error(),
+                status="Signal Not sent!"
+                )
+            raise
+        except Exception as e:
+            log_handler.inform_error_logger(
+                task_name="Messenger",
+                reason=type(e).__name__,
+                error_stack=log_handler.format_error(),
+                status="Signal Not sent!"
+                )
+            raise
+        finally:
+            if writer and not writer.is_closing():
+                writer.close()
+                await writer.wait_closed()
 
 class CommunicationChannel:
     def __init__(self):

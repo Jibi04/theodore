@@ -1,8 +1,8 @@
-import asyncio, getpass, json, psutil, struct, time, threading, traceback, numpy
+import asyncio, getpass, json, psutil, struct, threading, numpy
 
 from pathlib import Path
 from contextlib import suppress
-from typing import Mapping, Any, List
+from typing import Mapping
 from datetime import datetime as dt, UTC
 from asyncio.exceptions import IncompleteReadError
 from watchdog.observers import Observer
@@ -11,11 +11,12 @@ from watchdog.events import (
     FileMovedEvent, DirDeletedEvent, FileDeletedEvent, 
     )
 
+from theodore.core.paths import SOCKET_PATH
+from theodore.core.logger_setup import  system_logs
 from theodore.managers.file_manager import FileManager
-from theodore.core.informers import user_info, user_warning
-from theodore.core.file_helpers import resolve_path, organize
-from theodore.core.logger_setup import base_logger, error_logger, vector_perf, system_logs
 from theodore.core.exceptions import MissingParamArgument
+from theodore.core.file_helpers import resolve_path, organize
+from theodore.core.informers import user_info, user_warning, LogsHandler
 
 from theodore.core.paths import (
     SERVER_STATE_FILE, 
@@ -28,7 +29,7 @@ from theodore.core.paths import (
 
 
 class Signal:
-    def __init__(self, client_cb, socket: str | Path = "/tmp/theodore.sock"):
+    def __init__(self, client_cb, socket: str | Path = SOCKET_PATH):
         self.socket = Path(socket)
         self.client_cb = client_cb
         self._signal_shutdown_event = asyncio.Event()
@@ -75,103 +76,6 @@ class ETL:
         }
         DF_CHANNEL.write_text(json.dumps(stats, indent=2))
         return 1
-
-class Dispatch:
-
-    def __init__(self):
-        self.supervisor = Supervisor()
-
-    def dispatch_one(self, basename,  func, func_kwargs) -> None:
-        self._run(task_name=basename, func=func, func_kwargs=func_kwargs)
-
-    def dispatch_many(self, basename, func, func_kwargs) -> None:
-        for i, kwargs in enumerate(func_kwargs):
-            task_name = f"{basename}-{i}"
-            self._run(task_name, func=func, func_kwargs=kwargs)
-
-    def _run(self, task_name, func, func_kwargs) -> None:
-        task = asyncio.create_task(
-            self.supervisor.supervise(
-                func=func,
-                func_kwargs=func_kwargs
-            ),
-            name=task_name
-        )
-
-        self.supervisor.tasks.add(task)
-        task.add_done_callback(self.supervisor.tasks.discard)
-
-    async def shutdown(self) -> List:
-        user_info("Cleaning pending tasks...")
-        for task in self.supervisor.tasks:
-            task.cancel()
-        return await asyncio.gather(*self.supervisor.tasks, return_exceptions=True)
-
-class Supervisor:
-
-    def __init__(self):
-        self.__log_handler = LogsHandler()
-        self.tasks: set[asyncio.Task] = set()
-
-    async def supervise(self, func, func_kwargs) -> None:
-        task_name = "Supervisor-"
-        try:
-            start = time.perf_counter()
-            if asyncio.iscoroutinefunction(func):
-                result = await func(**func_kwargs)
-            else:
-                result = func(**func_kwargs)
-            stop = time.perf_counter()
-            vector_perf.internal(numpy.array([1, stop - start]))
-
-            current_task = asyncio.current_task()
-            if current_task:
-                task_name = current_task.get_name()
-            user_info(f"Supervisor: Task done - {result} took: {round(time.perf_counter() - start, 2)}s")
-            self.__log_handler.inform_base_logger(
-                task_name=task_name,
-                status="Completed",
-                task_response=result
-            )
-        except asyncio.CancelledError:
-            self.__log_handler.inform_error_logger(
-                task_name=task_name,
-                error_stack=self.__log_handler.format_error(),
-                reason="Task Cancelled"
-            )
-            raise
-        except (OSError, RuntimeError) as e:
-            self.__log_handler.inform_error_logger(
-                task_name=task_name,
-                error_stack=self.__log_handler.format_error(),
-                reason=type(e).__name__
-            )
-            raise
-        except Exception as e:
-            raise
-
-class LogsHandler:
-
-    def format_error(self) -> str:
-        return traceback.format_exc()
-
-    def inform_error_logger(self, task_name, error_stack, reason, status: str = "Cancelled"):
-        error_logger.internal(
-                f"""
-Task Name: {task_name}
-status: {status}
-Reason: {reason}
-Error stack: {error_stack}
-                """
-            )
-
-    def inform_base_logger(self, task_name: str, task_response: Any, status):
-        base_logger.internal(
-        f"""
-Task Name: {task_name}
-status: {status}
-Task response: {task_response}
-                """)
 
 class FileEventHandler:
     def __init__(self, organizer_path=WATCHER_ORGANIZER, etl_path=WATCHER_ETL_DIR):
@@ -230,17 +134,16 @@ class SystemMonitor:
         system_logs.info("System Monitor Stopped")
 
 class Worker:
-    def __init__(self):
-        from theodore.managers.download_manager import DownloadManager
-        from theodore.managers.scheduler import Scheduler
+    def __init__(self, scheduler, downloads_manager, dispatch):
 
-        self.__signal = Signal(client_cb=self.handler)
-        self.__dispatch = Dispatch()
-        self.__scheduler = Scheduler()
+        self.__dispatch = dispatch
+        self.__scheduler = scheduler
         self.__monitor = SystemMonitor()
         self.__log_handler = LogsHandler()
+        self.__downloader = downloads_manager
         self.__file_event_handler = FileEventHandler()
-        self.__downloader = DownloadManager()
+        self.__signal = Signal(client_cb=self.handler)
+
         self._worker_shutdown_event = asyncio.Event()
         self.__cmd_registry = {
             "STOP-PROCESSES": {"basename": "STOP-PROCESSES", "func": self.start_processes},
@@ -366,50 +269,6 @@ class Worker:
         except (BrokenPipeError, OSError, IncompleteReadError) as e:
             raise
         except Exception as e:
-            raise
-        finally:
-            if writer and not writer.is_closing():
-                writer.close()
-                await writer.wait_closed()
-
-    async def send_signal(self, header: bytes, message: bytes) -> str:
-        try:
-            reader, writer = await asyncio.open_unix_connection(self.__signal.socket)
-        except FileNotFoundError:
-            raise
-        try:
-            if writer.is_closing():
-                raise
-            writer.write(header)
-            writer.write(message)
-            await writer.drain()
-
-            message = await reader.read(1024)
-            # user_info(message.decode())
-            return message.decode()
-        except (IncompleteReadError, InterruptedError, asyncio.CancelledError):
-            self.__log_handler.inform_error_logger(
-                task_name="Messenger",
-                reason="Connection Interupted",
-                error_stack=self.__log_handler.format_error(),
-                status="Signal Not sent!"
-                )
-            raise
-        except (BrokenPipeError, OSError):
-            self.__log_handler.inform_error_logger(
-                task_name="Messenger",
-                reason="BrokenPipe",
-                error_stack=self.__log_handler.format_error(),
-                status="Signal Not sent!"
-                )
-            raise
-        except Exception as e:
-            self.__log_handler.inform_error_logger(
-                task_name="Messenger",
-                reason=type(e).__name__,
-                error_stack=self.__log_handler.format_error(),
-                status="Signal Not sent!"
-                )
             raise
         finally:
             if writer and not writer.is_closing():

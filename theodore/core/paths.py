@@ -7,7 +7,7 @@ import os
 DATA_DIR = Path(__file__).parent.parent / "data"
 
 JSON_DIR = DATA_DIR / "json"
-TEMP_DIR = Path(tempfile.gettempdir()) / "theodore_downloads"
+TEMP_DIR = Path(tempfile.gettempdir()) / "theodore"
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
 JSON_DIR.mkdir(parents=True, exist_ok=True)
 FILE = JSON_DIR / "cache.json"
@@ -17,8 +17,7 @@ MODELS_PATH.mkdir(parents=True, exist_ok=True)
 
 TRANSFORMER_MODEL_PATH = MODELS_PATH/"all_MiniLM_L6_v2"
 
-
-TEMP_DIR = tempfile.gettempdir()
+SOCKET_PATH = TEMP_DIR/"theodore.sock"
 
 DF_CHANNEL = Path(f"{TEMP_DIR}/transformed_data.json")
 SYS_VECTOR_FILE = Path(f"{TEMP_DIR}/sys_vector.npy")

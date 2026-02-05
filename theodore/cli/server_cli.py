@@ -1,21 +1,21 @@
-import json
-import struct
 import rich_click as click
+from theodore.core.lazy import Asyncio
 from theodore.core.informers import user_info
 from theodore.cli.async_click import AsyncCommand
-from theodore.core.lazy import get_worker, Asyncio
+
 
 @click.command(cls=AsyncCommand)
-@click.pass_context
-async def start_servers(ctx: click.Context):
+async def start_servers():
     """Start Servers and processes"""
+    from theodore.core.state import TheodoreStateManager
+
+    worker = TheodoreStateManager()._get_worker()
     asyncio = Asyncio()
-    WORKER = get_worker()
     try:
-        await WORKER.start_processes()
+        await worker.start_processes()
     except (asyncio.CancelledError, KeyboardInterrupt):
         click.echo("\nShutdown Initiated...")
-        await WORKER.stop_processes()
+        await worker.stop_processes()
 
 
 @click.command(cls=AsyncCommand)
@@ -23,12 +23,12 @@ async def stop_servers():
     """
     Stop all servers and Processes
     """
-    WORKER = get_worker()
+    from theodore.core.transporter import send_command
+
     try:
-        args = {"cmd": "STOP-PROCESSES", "file_args": {}}
-        message = json.dumps(args).encode()
-        header = struct.pack("!I", len(message))
-        await WORKER.send_signal(header=header, message=message)
+        args = {"intent": "STOP-PROCESSES", "file_args": {}}
+        response = await send_command(**args)
+        user_info(response)
     except (ConnectionError, FileNotFoundError):
         user_info("Theodore is Offline")
     
