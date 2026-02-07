@@ -44,10 +44,30 @@ async def start(request: Request, background_tasks: BackgroundTasks):
     background_tasks.add_task(scheduler.start_jobs)
     return "Jobs started"
 
+@theodore.api_route("/jobs/stop", methods=["GET", "POST"])
+async def stop(request: Request):
+    state: TheodoreState = request.app.state.internals
+    scheduler = state.scheduler
+    scheduler.stop_jobs()
+    return "Jobs stopped"
 
 @theodore.get("/sessions/new")
 async def get_session(request: Request):
     state: TheodoreState = request.app.state.internals
     await state.get_session()
     return "Yep We've got it"
+
+@theodore.get("/processes/start")
+async def start_process(request: Request, background_tasks: BackgroundTasks):
+    state: TheodoreState = request.app.state.internals
+    worker = state.worker()
+    background_tasks.add_task(worker.start_processes)
+    return "Processes Started"
+
+@theodore.get("/processes/stop")
+async def stop_process(request: Request, background_tasks: BackgroundTasks):
+    state: TheodoreState = request.app.state.internals
+    worker = state.worker()
+    await worker.stop_processes()
+    return "Processes Stopped"
 

@@ -23,7 +23,7 @@ def shell(ctx: click.Context):
 @click.pass_context
 async def backup(ctx: click.Context, path, **kwds):
     """Backup files to cloud using rclone"""
-    SHELL = ctx.obj['manager']
+    SHELL = ctx.obj['manager'] or get_shell_manager()
     asyncio = ctx.obj['asyncio']
     try:
         task = asyncio.create_task(SHELL.backup_files_rclone(directory=path, **kwds))

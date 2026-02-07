@@ -1,4 +1,4 @@
-import asyncio, getpass, json, psutil, struct, threading, numpy
+import asyncio, getpass, json, psutil, struct, threading, numpy, time
 
 from pathlib import Path
 from contextlib import suppress
@@ -9,6 +9,7 @@ from watchdog.observers import Observer
 from watchdog.events import (
     FileClosedEvent, FileSystemEventHandler, DirMovedEvent, 
     FileMovedEvent, DirDeletedEvent, FileDeletedEvent, 
+    FileModifiedEvent, DirModifiedEvent
     )
 
 from theodore.core.paths import SOCKET_PATH
@@ -91,8 +92,8 @@ class FileEventHandler:
         self._observer_target_organizer = resolved_paths[0]
         self._observer_target_etl = resolved_paths[1]
         self._observer = Observer()
-        self._file_organize_event = FileEventManager(user=self._user, target_folder=self._observer_target_organizer)
-        self._etl_event_handler = ETLEventManager(target_path=self._observer_target_etl)
+        self._file_organize_event = FileEventManager(target_path=self._observer_target_organizer)
+        self._etl_event_handler = FileEventManager(target_path=self._observer_target_etl)
 
     def start(self) -> None:
         user_info("Observer Running")
@@ -102,7 +103,7 @@ class FileEventHandler:
 
         self._watcher_shutdown_event.wait()
 
-        self._observer.join(2)
+        self._observer.join(0.53)
         self._observer.stop()
         user_info("Observer Stopped")
 
@@ -134,24 +135,35 @@ class SystemMonitor:
         system_logs.info("System Monitor Stopped")
 
 class Worker:
-    def __init__(self, scheduler, downloads_manager, dispatch):
+    from theodore.managers.scheduler import Scheduler
+    from theodore.ai.dispatch import Dispatch
+    def __init__(self, scheduler: Scheduler, downloads_manager, dispatch: Dispatch):
 
         self.__dispatch = dispatch
-        self.__scheduler = scheduler
+        self.__scheduler= scheduler
         self.__monitor = SystemMonitor()
         self.__log_handler = LogsHandler()
         self.__downloader = downloads_manager
         self.__file_event_handler = FileEventHandler()
         self.__signal = Signal(client_cb=self.handler)
+        self._signal_task = None
 
         self._worker_shutdown_event = asyncio.Event()
         self.__cmd_registry = {
-            "STOP-PROCESSES": {"basename": "STOP-PROCESSES", "func": self.start_processes},
+            "STOP-PROCESSES": {"basename": "STOP-PROCESSES", "func": self.stop_processes},
+            "START-PROCESSES": {"basename": "START-PROCESS", "func": self.start_processes},
             "RESUME": {"basename": "DownloadManager - Resume", "func": self.__downloader.resume},
             "STOP": {"basename": "DownloadManager - Stop", "func": self.__downloader.stop_download},
             "PAUSE": {"basename": "DownloadManager - Pause", "func": self.__downloader.pause},
             "DOWNLOAD": {"basename": "Download Manager - Download", "func": self.__downloader.download_file},
-            "START-ETL": {"basename": "SCHEDULER", "func": organize}
+            "START-ETL": {"basename": "SCHEDULER", "func": organize},
+            "STOP-JOBS": {"basename": "STOP-SCHEDULER", "func": self.__scheduler.stop_jobs},
+            "START-JOBS": {"basename": "START-SCHEDULER", "func": self.__scheduler.start_jobs},
+            "PAUSE-JOB": {"basename": "SCHEDULER", "func": self.__scheduler.pause_job},
+            "RESUME-JOB": {"basename": "SCHEDULER", "func": self.__scheduler.resume_job},
+            "REMOVE-JOB": {"basename": "SCHEDULER", "func": self.__scheduler.remove_job},
+            "JOB-INFO": {"basename": "SCHEDULER", "func": self.__scheduler.job_info},
+            "NEW-JOB": {"basename": "NEW-JOB", "func": self.__scheduler.new_job}
         }
 
     async def start_processes(self) -> None:
@@ -198,7 +210,8 @@ class Worker:
 
             # Await server shutdown
             with suppress(TimeoutError):
-                await asyncio.wait_for(self.signal_task, timeout=1)
+                if self._signal_task:
+                    await asyncio.wait_for(self.signal_task, timeout=1)
 
             # free blocking start-processes method
 
@@ -255,7 +268,7 @@ class Worker:
             cmd = message.get("cmd", None)
             args = message.get("file_args")
 
-            cmd_register = self.__cmd_registry.get(cmd, None)
+            cmd_register = self.__cmd_registry.get(str(cmd).upper(), None)
             if cmd_register is None:
                 writer.write(f"Reader: unknown command '{cmd}'".encode())
                 await writer.drain()
@@ -286,10 +299,15 @@ class Worker:
             case "STOP-PROCESSES" | "STOP-SERVERS":
                 await self.stop_processes()
                 return
-            case "SCHEDULER":
-                self.__scheduler.new_job(func=func, **file_args)
+            case "START-PROCESSES" | "START-SERVERS":
+                await self.start_processes()
                 return
-
+            case "STOP-SCHEDULER":
+                self.__scheduler.stop_jobs()
+                return
+            case "START-SCHEDULER":
+                await self.__scheduler.start_jobs()
+                return
 
         if isinstance(file_args, list):
             self.__dispatch.dispatch_many(basename=basename, func=func, func_kwargs=file_args)
@@ -297,45 +315,58 @@ class Worker:
         self.__dispatch.dispatch_one(basename, func, file_args)
         return
 
-class ETLEventManager(FileSystemEventHandler):
+class FileEventManager(FileSystemEventHandler):
     def __init__(self, target_path: str | Path):
-        self.target_path = target_path
+        self.target_path = Path(target_path)
         self.file_manager = FileManager()
         self.etl_manager = ETL()
-
-    def on_moved(self, event: DirMovedEvent | FileMovedEvent) -> None:
-        if (p:=resolve_path(event.src_path)).is_dir():
-            return organize(p)
-        return super().on_moved(event)
-
-    def on_closed(self, event: FileClosedEvent) -> None:
-        if (p:=resolve_path(event.src_path)).is_dir():
-            return organize(p)
-        user_info(f"File detected in data directory. Processing...\nPath: {str(p)}")
-        if not p.suffix == ".csv":
-            return self.file_manager.move_dst_unknown(src=p)
-        signal = self.etl_manager.transform(path=p)
-        if signal:
-            self.file_manager.move_file(src=str(event.src_path), dst="~/scripts/theodore/theodore/tests/original_files")
-        return super().on_closed(event)
-
-class FileEventManager(FileSystemEventHandler):
-    def __init__(self, user: str, target_folder: str = ""):
-        self._target_folder = target_folder
-        self._user = user
-        self.file_manager = FileManager()
-
-    def on_moved(self, event: DirMovedEvent | FileMovedEvent) -> None:
-        user_info(f"{event.src_path} Moved to {event.dest_path}. USER: {self._user}")
-
-    def on_closed(self, event: FileClosedEvent) -> None:
-        if (path:=resolve_path(event.src_path)).is_dir():
-            return
-        user_info(f"New {resolve_path(event.src_path).suffix} file Detected Processing...\n {event.src_path}")
-        self.file_manager.move_dst_unknown(src=path)
+        self._user = getpass.getuser()
 
     def on_deleted(self, event: DirDeletedEvent | FileDeletedEvent) -> None:
         user_warning(f"{event.src_path} Deleted. USER: {self._user}")
+
+    def on_any_event(self, event) -> None:
+        # Move events don't affect doesn't modify data just location swapping
+        user_info(f"new event: {event.event_type}")
+        # if not event.event_type == "moved":
+        #     return
+        # user_info(f"{event.src_path} Moved to {event.dest_path}. USER: {self._user}")
+        # time.sleep(0.5)
+
+        # # Only interested in incoming files and directories
+        # if not str(Path(str(event.dest_path)).absolute()) == str(self.target_path.absolute()):
+        #     return
+
+        # self.handle_event(str(event.src_path))
+        # return super().on_modified(event)
+
+    def on_closed(self, event: FileClosedEvent) -> None:
+        # File data modified wait
+        user_info(f"New '{resolve_path(event.src_path).suffix}' file Detected in '{self.target_path}'")
+        user_info(f"Destination path: {event.dest_path}\n Source Path {event.src_path}")
+        time.sleep(0.42)
+        self.handle_event(str(event.src_path))
+        return super().on_closed(event)
+    
+    def run_etl(self, p: str | Path) -> None:
+        BACKUP = Path(__file__).parent.parent/"tests"/"original_files"
+        if not BACKUP.exists(): BACKUP.mkdir(exist_ok=True, parents=True)
+
+        signal = self.etl_manager.transform(path=p)
+        if signal:
+            self.file_manager.move_file(src=p, dst=BACKUP)
+    
+    def handle_event(self, path: str) -> None:
+
+        if (p:=resolve_path(path)).is_dir():
+            return organize(p)
+        
+        if not p.suffix == ".csv":
+            self.file_manager.move_dst_unknown(p)
+            return
+        
+        self.run_etl(p)
+        return 
 
 def get_current_metrics(interval):
     me = psutil.Process()

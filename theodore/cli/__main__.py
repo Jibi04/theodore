@@ -9,7 +9,7 @@ from theodore.cli.weather_cli import weather
 from theodore.core.theme import cli_defaults
 from theodore.core.informers import user_info
 from theodore.cli.task_cli import task_manager
-from theodore.cli.schedule_cli import schedule
+from theodore.cli.schedule_cli import scheduler
 from theodore.cli.download_cli import downloads
 from theodore.cli.async_click import AsyncCommand
 from theodore.core.logger_setup import base_logger
@@ -60,7 +60,7 @@ theodore.add_command(task_manager, "tasks")
 theodore.add_command(weather, 'weather')
 theodore.add_command(config, "configs")
 theodore.add_command(downloads, "download")
-theodore.add_command(schedule, "schedule")
+theodore.add_command(scheduler, "scheduler")
 theodore.add_command(backup, "backup")
 theodore.add_command(add_git, "add")
 theodore.add_command(commit, "commit")

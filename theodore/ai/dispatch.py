@@ -168,6 +168,7 @@ class Supervisor:
         self.tasks: set[asyncio.Task] = set()
 
     async def supervise(self, func, func_kwargs) -> None:
+        import numpy
         task_name = "Supervisor-"
         try:
             start = time.perf_counter()

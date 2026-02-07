@@ -1,4 +1,6 @@
-import click
+import rich_click as click
+from click_option_group import optgroup, RequiredMutuallyExclusiveOptionGroup
+
 
 from theodore.cli.async_click import AsyncCommand
 from theodore.core.transporter import send_command
@@ -50,7 +52,48 @@ class Dtype(click.ParamType):
 KV_PAIRS = KeyValueParse()
 DEFAULT_TYPE = Dtype()
 
-@click.command(cls=AsyncCommand)
+@click.group()
+def scheduler():
+    """Manage, and create new Jobs."""
+    ...
+
+@scheduler.command(cls=AsyncCommand)
+async def start_jobs():
+    """Start all currently queued jobs"""
+    await send_command("START-JOBS", {})
+
+@scheduler.command(cls=AsyncCommand)
+async def stop_jobs():
+    """Stop all job executions (running and queued)"""
+    await send_command("STOP-JOBS", {})
+
+@scheduler.command(cls=AsyncCommand)
+@optgroup.group("Required one", cls=RequiredMutuallyExclusiveOptionGroup)
+@optgroup.option("--key", "-k", type=str)
+@optgroup.option("--all", "-a", is_flag=True)
+async def job_info(key, all):
+    """List All pending Jobs"""
+    await send_command("JOB-INFO", {"key": key, "all": all})
+
+@scheduler.command(cls=AsyncCommand)
+@click.option("--key", "-k", type=str, required=True)
+async def delete_job(key):
+    """Delete / remove a job from jobstore"""
+    await send_command("REMOVE-JOB", {"key": key})
+
+@scheduler.command(cls=AsyncCommand)
+@click.option("--key", "-k", type=str, required=True)
+async def pause_job(key):
+    """set pause flag on a job (pending or already running)"""
+    await send_command("PAUSE-JOB", {"key": key})
+
+@scheduler.command(cls=AsyncCommand)
+@click.option("--key", "-k", type=str, required=True)
+async def resume_job(key):
+    """resume job flagged pause"""
+    await send_command("RESUME-JOB", {"key": key})
+
+@scheduler.command(cls=AsyncCommand)
 @click.option("--key", "-k", required=True, type=str)
 @click.option("--func_args", "--args", type=KV_PAIRS, help="key=value comma separated arguments 'key1=val1,key2=val2'")
 @click.option("--func_path", "-p", type=str)
@@ -65,7 +108,7 @@ DEFAULT_TYPE = Dtype()
 @click.option("--day", "-d", type=int)
 @click.option("--profiling_enabled", is_flag=True, default=True)
 @click.pass_context
-async def schedule(
+async def new_job(
     ctx: click.Context,
     **kwargs
     ):
@@ -75,7 +118,7 @@ async def schedule(
 
     """
     package = {
-        "intent": "START-ETL",
+        "intent": "NEW-JOB",
         "file_args": ctx.params
     }
 

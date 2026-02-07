@@ -114,6 +114,7 @@ class Scheduler:
         self.scheduler = scheduler
         self._job_registry: List[Job] = self.scheduler.get_jobs()
         self._scheduler_shutdown_event = asyncio.Event()
+        self.running = False
 
     def new_job(
             self,
@@ -188,6 +189,29 @@ class Scheduler:
         job.pause()
         user_info(f"Job with key '{key}' paused")
 
+    def job_info(self, key: str | None = None, all: bool = False):
+        from theodore.core.theme import console
+
+        jobs: List[Job] = []
+        if key:
+            job = self.get_job(key=key)
+
+            if job is None:
+                raise JobNotFoundError(f"Invalid Job Key. '{key}'")
+            
+            jobs.append(job)
+        elif all:
+            jobs = self.get_jobs()
+
+        jobs_info = list()
+
+        for job in jobs:
+            job_info = (str(job.id), str(job.next_run_time), str(job.name), job.func.__name__, str(job.kwargs), str(job.args), str(job.executor), str(job.trigger))
+            jobs_info.append(job_info)
+
+        table = get_table(jobs_info)
+        console.print(table)
+
     def resume_job(self, key: str):
         job = self.get_job(key=key)
 
@@ -206,12 +230,16 @@ class Scheduler:
         return self.scheduler.add_job(func, trigger=trigger, kwargs=job.func_args, executor="sync", id=key, replace_existing=True)
     
     async def start_jobs(self):
+        if self.running:
+            user_info("Scheduler Already Running")
+            return
         user_info("Scheduler Running..")
         self.scheduler.start()
-
+        self.running = True
         await self._scheduler_shutdown_event.wait()
 
         self.scheduler.shutdown(wait=True)
+        self.running = False
         user_info("Scheduler shutdown.")
         return
     
@@ -235,7 +263,7 @@ def resolve_module_path(
         commands: dict[str, tuple[str, str | None]] = commands
         ) -> None | Tuple[str, str | None, str]:
     
-    if (entry:= commands.get(name)) is None:
+    if (entry:= commands.get(str(name).upper())) is None:
         return None
     
     target_path, method = entry
@@ -292,3 +320,25 @@ __trigger_format__ = {
     "cron": parse_cron,
     "interval": parse_interval
 }
+
+def get_table(jobs: list[tuple[str, str, str, str, str, str, str, str]]):
+
+    from rich.table import Table
+
+    table = Table()
+    table.leading = 1
+    table.show_lines = True
+
+    table.add_column("key", justify="center", header_style="dim cyan")
+    table.add_column("nex-runtime", justify="center", header_style="dim cyan")
+    table.add_column("name", justify="center", header_style="dim cyan")
+    table.add_column("func name", justify="center", header_style="dim cyan")
+    table.add_column("kwargs", justify="center", header_style="dim cyan")
+    table.add_column("args", justify="center", header_style="dim cyan")
+    table.add_column("executor", justify="center", header_style="dim cyan")
+    table.add_column("trigger", justify="center", header_style="dim cyan")
+
+    for (key, runtime, name, func_name, kwargs, args, executor, trigger) in jobs:
+        table.add_row(key, runtime, name, func_name, kwargs, args, executor, trigger)
+    
+    return table
