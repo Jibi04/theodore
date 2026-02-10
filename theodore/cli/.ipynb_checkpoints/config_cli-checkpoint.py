@@ -23,33 +23,33 @@ def config(ctx):
 @click.argument("category", type=click.Choice(['weather', 'downloads', 'tasks']))
 @click.pass_context
 def set(ctx, default_location, api_key, default_path, target_dirs, file_patterns, **kwargs):
-    base_logger.internal('Getting option from ctx manager')
+    base_logger.debug('Getting option from ctx manager')
     args_map = ctx.params
 
-    base_logger.internal('cleaning parameters')
+    base_logger.debug('cleaning parameters')
 
     if default_location: default_location = default_location.strip()
 
 
     if default_path: 
-        base_logger.internal('cleaning Path parameter')
+        base_logger.debug('cleaning Path parameter')
 
         path = Path(default_path.strip()).absolute()
 
         if path is None: return user_error('Unable to set default path invalid path')
         path.parent.mkdir(exist_ok=True, parents=True) 
 
-        base_logger.internal('converting default path to str')
+        base_logger.debug('converting default path to str')
         path_str = str(path)
-        base_logger.internal('updating args map default location')
+        base_logger.debug('updating args map default location')
         args_map['default_location'] = path_str
 
 
     if target_dirs: 
-        base_logger.internal('cleaning target dirs parameter')
+        base_logger.debug('cleaning target dirs parameter')
 
         new_dict = target_dirs.split(',')
-        base_logger.internal('cleaning new target dirs')
+        base_logger.debug('cleaning new target dirs')
 
         base_logger.debug(f'cleaned target dirs: {new_dict}')
         cleaned_dict = [tuple(d.split('=')) for d in new_dict if '=' in d]
@@ -57,12 +57,12 @@ def set(ctx, default_location, api_key, default_path, target_dirs, file_patterns
         dir_dict = {k.strip():str(Path(v).expanduser()) for (k, v) in cleaned_dict}
         base_logger.debug(f'Cleaned target directory: {dir_dict}')
 
-        base_logger.internal('updating args map default location')
+        base_logger.debug('updating args map default location')
         args_map['target_dirs'] = dir_dict
     
 
     if file_patterns:
-        base_logger.internal('cleaning new file patterns')
+        base_logger.debug('cleaning new file patterns')
         new_patterns = file_patterns.split(',')
         cleaned_patterns_list = ["*." + ptrn.replace('.', '').replace('*', '').strip() for ptrn in new_patterns]
 
@@ -71,18 +71,18 @@ def set(ctx, default_location, api_key, default_path, target_dirs, file_patterns
     configs = ctx.obj['configs']
 
     try:
-        base_logger.internal('setting configs')
-        base_logger.internal('Awaiting response from database')
+        base_logger.debug('setting configs')
+        base_logger.debug('Awaiting response from database')
         response = configs.set(**args_map)
         msg = response.get('message')
 
         if not response.get('ok'):
-            base_logger.internal('An error occurred with the db Aborting ...')
+            base_logger.debug('An error occurred with the db Aborting ...')
             return
         
         user_success(msg)
     except Exception as e:
-        base_logger.internal(f'{type(e).__name__} error Aborting ...')
+        base_logger.debug(f'{type(e).__name__} error Aborting ...')
         error_logger.exception(e)
 
     return
@@ -97,7 +97,7 @@ def set(ctx, default_location, api_key, default_path, target_dirs, file_patterns
 def show_configs(ctx, all, weather, downloads, todos):
     """Show category configurations"""
 
-    base_logger.internal('Loading configurations file')
+    base_logger.debug('Loading configurations file')
     config_manager = ctx.obj['config_manager']
     configs = config_manager.load_file(config=True)
     if not configs:
@@ -107,22 +107,22 @@ def show_configs(ctx, all, weather, downloads, todos):
     base_logger.debug(f'configs file loaded {configs}')
 
     if weather:
-        base_logger.internal('getting weather data')
+        base_logger.debug('getting weather data')
         json_data = configs.get('weather')
         base_logger.debug(f"Loaded weather configuration data: {json_data}")
 
     if downloads:
-        base_logger.internal('getting downloads data')
+        base_logger.debug('getting downloads data')
         json_data = configs.get('downloads')
         base_logger.debug(f"Loaded downloads configuration data: {json_data}")
 
     if todos:
-        base_logger.internal('getting to-dos data')
+        base_logger.debug('getting to-dos data')
         json_data = configs.get('todos')
         base_logger.debug(f"Loaded to-dos configuration data: {json_data}")
 
     if all:
-        base_logger.internal('loading all configs data')
+        base_logger.debug('loading all configs data')
         json_data = configs
         base_logger.debug(f"Loaded all configs data: {json_data}")
 
@@ -130,9 +130,9 @@ def show_configs(ctx, all, weather, downloads, todos):
         user_error('No configurations have been set yet.')
         return
 
-    base_logger.internal('writing and indenting configs')
+    base_logger.debug('writing and indenting configs')
     data = json.dumps(json_data, indent=4)
-    base_logger.internal("Indented configs data: {data}")
+    base_logger.debug("Indented configs data: {data}")
 
     user_success(data)
     return

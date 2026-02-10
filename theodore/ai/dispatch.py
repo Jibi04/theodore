@@ -177,7 +177,7 @@ class Supervisor:
             else:
                 result = func(**func_kwargs)
             stop = time.perf_counter()
-            vector_perf.internal(numpy.array([1, stop - start]))
+            vector_perf.debug(numpy.array([1, stop - start]))
 
             current_task = asyncio.current_task()
             if current_task:

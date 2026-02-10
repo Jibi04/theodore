@@ -30,10 +30,10 @@ Tasks = Table(
 
 def create_table():
     try:
-        base_logger.internal('Creating tasks table(s)')
+        base_logger.debug('Creating tasks table(s)')
 
         asyncio.run(create_tables())
-        base_logger.internal('Task table created')
+        base_logger.debug('Task table created')
 
     except Exception as e:
         error_logger.exception(e)

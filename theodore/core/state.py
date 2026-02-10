@@ -9,7 +9,7 @@ The CLI delegates the command rather than do it internally provided that
 the task to run is under the jurisdiction of the classes under theodore's Long running processes.
 
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from pydantic import BaseModel
 from dataclasses import dataclass
 from typing import Protocol, Optional
@@ -186,7 +186,7 @@ class TheodoreStateManager:
         if is_healthy:
             return self._session
         
-        base_logger.internal("Session unhealthy. Repairing...")
+        base_logger.debug("Session unhealthy. Repairing...")
 
         try:
             await self._session.rollback()
@@ -237,9 +237,9 @@ class TheodoreStateManager:
         
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if exc_type is not None:
-            error_logger.internal(f"ErrorType: {exc_type}\n VAL: {exc_val}\n Traceback: {exc_tb}")
+            error_logger.debug(f"ErrorType: {exc_type}\n VAL: {exc_val}\n Traceback: {exc_tb}")
         else:
-            base_logger.internal("Cleaning up resources, No errors gotten.")
+            base_logger.debug("Cleaning up resources, No errors gotten.")
         await self._cleanup()
 
 
@@ -249,3 +249,7 @@ async def lifespan(app: FastAPI):
         app.state.internals = theodore_state
         yield
     user_info("Theodore Cleanup done. Web Offline.")
+
+
+def get_state(request: Request):
+    return request.app.state.internals

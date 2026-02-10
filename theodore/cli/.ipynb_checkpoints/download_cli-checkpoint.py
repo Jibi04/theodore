@@ -39,7 +39,7 @@ def multi_download(urls, dir_path = None):
 
     configs_manager.save_file(movie_configs, movie=True)
         
-    base_logger.internal('sending request for fetch')
+    base_logger.debug('sending request for fetch')
     for t in threads:
         t.join()
 
@@ -59,7 +59,7 @@ def downloads(ctx):
 @click.pass_context
 def movie(ctx, url, dir_path, resume):
     """Download movies mkv, mp4, and zip"""
-    base_logger.internal('preparing downloads manager')
+    base_logger.debug('preparing downloads manager')
 
     manager = ctx.obj['configs_manager']
     configs = manager.load_file(config=True)
@@ -68,14 +68,14 @@ def movie(ctx, url, dir_path, resume):
     movies.setdefault("downloads", {})
     movies["downloads"].setdefault("movies", {})
 
-    base_logger.internal('preparing downloads path')
+    base_logger.debug('preparing downloads path')
 
     if not dir_path:
         dir_path = configs.get('downloads', {}).get('default_location', "~/Videos")
 
     dir_str = Path(dir_path).expanduser().absolute()
 
-    base_logger.internal('parsing url for fetch')
+    base_logger.debug('parsing url for fetch')
     manager.save_file(movies, movie=True)
 
     if resume:

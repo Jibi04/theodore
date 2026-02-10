@@ -52,11 +52,11 @@ def downloads(ctx: click.Context, dir_path: str) -> None:
     ctx.obj['dir_path'] = Path(dir_path).expanduser()
     ctx.obj['downloader'] = get_downloader()
 
-@downloads.command(cls=AsyncCommand)
+@downloads.command(cls=AsyncCommand, name="file")
 @click.option('--url', '-u', type=str, help='comma separated urls', required=True)
 @click.pass_context
 async def file_(ctx: click.Context, url: str) -> None:
-    """Download, Manage and track downloads"""
+    """Download Files from Any where with simply a url, Web Scraper integration comming soon!"""
     downloader = ctx.obj['downloader']
 
     pending_downloads = await downloader.get_undownloaded_urls()
@@ -131,20 +131,23 @@ async def resume(ctx: click.Context, filename: str, all):
         if not data:
             await inform_client(message=f"No currently downloading file with name {filename}")
             return
-        await send_command(
+        msg = await send_command(
             intent="RESUME", 
             file_args={
                 "filename": data.filename, 
                 "filepath": data.filepath
                 }
             )
+        user_info(msg)
+        return 
         
     resumable_downloads = await downloader.get_undownloaded_urls()
     if not resumable_downloads:
         await inform_client(message="There are no pending downloads to continue.")
         return
     url_info = [ downloader.parse_url(url) for url in resumable_downloads ]
-    await send_command(intent="DOWNLOAD", file_args=url_info)
+    msg = await send_command(intent="DOWNLOAD", file_args=url_info)
+    user_info(msg)
 
 @downloads.command(cls=AsyncCommand)
 @click.argument('filename')

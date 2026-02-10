@@ -89,7 +89,7 @@ class SystemService:
         rc = self.process.returncode
 
         self._cleanup()
-        base_logger.internal(f"Unexpected shutdown cleaning up...\n RC: {rc}")
+        base_logger.debug(f"Unexpected shutdown cleaning up...\n RC: {rc}")
 
     def _graceful_shutdown(self, timeout=5):
         if self.process is None:
@@ -130,9 +130,9 @@ class SystemService:
 
     def _log_stream(self, line: str, tag: str):
         if tag == "OUT":
-            base_logger.internal(line)
+            base_logger.debug(line)
         else:
-            error_logger.internal(line)
+            error_logger.debug(line)
 
     def stop_processes(self):
         self.shutdown_event.set()

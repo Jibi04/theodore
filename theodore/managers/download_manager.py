@@ -89,7 +89,7 @@ class DownloadManager:
             self.active_events[filename] = asyncio.Event()
             self.active_events[filename].set()
 
-            base_logger.internal('Preparing file directory for download')
+            base_logger.debug('Preparing file directory for download')
             filepath = Path(directory).expanduser()
             filepath.parent.mkdir(parents=True, exist_ok=True)
             
@@ -183,7 +183,7 @@ class DownloadManager:
                                         except FileNotFoundError:
                                             pass
                                         user_error(f"Download finished but file size mismatch: {final_size} != {total_size}. Restarting...")
-                                        base_logger.internal("Corrupted file data restarting download")
+                                        base_logger.debug("Corrupted file data restarting download")
                                         continue # Go to the next retry attempt
                                     else:
                                         # SUCCESS PATH
@@ -193,7 +193,7 @@ class DownloadManager:
                         # --- Error Handling ---
                         except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.ConnectError, httpx.ReadError, httpx.WriteError) as err:
                             user_error(f"{type(err).__name__} during download of {filename}. Attempting retry {attempt + 1}/{retries}...")
-                            base_logger.internal("HTTPX timeout occurred.")
+                            base_logger.debug("HTTPX timeout occurred.")
                             await asyncio.sleep(2 ** attempt)
                             continue
                         except httpx.HTTPStatusError as e:
@@ -222,7 +222,7 @@ class DownloadManager:
                                 continue # Restart loop
                             else:
                                 user_error(f"HTTP error {e.response.status_code} for {filename}. Attempting retry {attempt + 1}/{retries}...")
-                                base_logger.internal(f"HTTPX Status Error: {e.response.status_code}")
+                                base_logger.debug(f"HTTPX Status Error: {e.response.status_code}")
                             await asyncio.sleep(2 ** attempt * 3)
                             continue
                         except KeyboardInterrupt:

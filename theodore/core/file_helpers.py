@@ -177,7 +177,7 @@ def organize(src_path: str | Path) -> None:
         dst.expanduser().mkdir(parents=True, exist_ok=True)
 
         move_entry(src=path, dst=dst)
-        base_logger.internal(f"\nMoved {path.name} from {path.parent} to {dst.as_posix()}.")
+        base_logger.debug(f"\nMoved {path.name} from {path.parent} to {dst.as_posix()}.")
 
 
 def archive_folder(src: str | Path, filename: str | None = None, format: str = ".tar.gz"):
@@ -191,7 +191,7 @@ def archive_folder(src: str | Path, filename: str | None = None, format: str = "
 
             if path.is_dir(): tar.add(path)
             elif path.is_file(): tar.addfile(tarinfo=tar_info)
-            base_logger.internal(tar_info)
+            base_logger.debug(tar_info)
             return 1
     except tarfile.CompressionError:
         error_logger.info(traceback.format_exc())
@@ -204,7 +204,7 @@ def extract_folder(src: str | Path, filename: str):
         with tarfile.open(filename, 'r') as tar:
             tar_info = tar.gettarinfo(path)
             tar.extractall(path)
-            base_logger.internal(tar_info)
+            base_logger.debug(tar_info)
             return 1
     except tarfile.ReadError:
         error_logger.info(traceback.format_exc())

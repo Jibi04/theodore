@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %} Theodore Home {% endblock %}
+
+{% block content %}
+    <h1>Hi Theodore here, what are we doing today?</h1>
+    <p>
+        <a href="{{ url_for('jobs_home') }}">Schedule Job</a>
+    </p>
+    <p>
+        <a href="{{ url_for('start_processes') }}">Start processes</a>
+    </p>
+    <p>
+        <a href="{{ url_for('stop_processes') }}">Stop processes</a>
+    </p>
+{% endblock %}

@@ -112,7 +112,7 @@ class ShellManager:
         (returncode, stdout, stderr) = await subprocess(cmd=cmd, cwd=cwd)
         duration = round(time.perf_counter() - start, 3)
         (tid, workdone, errorweight) = self._extract_file_count(cmd=cmd_for, stdout=stdout, stderr=stderr)
-        vector_perf.internal(numpy.array(
+        vector_perf.debug(numpy.array(
             [   
                 tid,
                 1 if returncode == 0 else 0, 
@@ -181,7 +181,7 @@ async def subprocess_with_progress(cmd, description="Processing..."):
         if match:
             workdone = match.group(1)
 
-        vector_perf.internal(numpy.array(
+        vector_perf.debug(numpy.array(
             [TaskID.Backup, 
              1 if returncode == 0 else 0, 
              stop - start,

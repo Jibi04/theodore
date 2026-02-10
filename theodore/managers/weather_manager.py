@@ -16,7 +16,7 @@ from theodore.core.paths import DATA_DIR
 from theodore.core.time_converters import get_localzone
 from theodore.managers.configs_manager import ConfigManager
 from httpx import ConnectTimeout, ReadTimeout, ReadError
-from typing import Type, TypeVar
+from typing import Type, TypeVar, Any
 
 WeatherModel, CurrentModel, AlertsModel, ForecastModel = get_weather_models()
 DOTENV_PATH = find_dotenv()
@@ -37,7 +37,7 @@ class WeatherManager:
     def validate_data(self, schema: Type[T], raw_data: dict, extra_context: dict):
         return schema(**raw_data, **extra_context).model_dump()
 
-    async def make_request(self, query, location: str = None, retries: int =3, clear_cache = False):
+    async def make_request(self, query, location: str | None = None, retries: int =3, clear_cache = False) -> dict[str, Any]:
         """Make weather request from the weather API 
 
         - headers: special key_word headers you'd like to add
@@ -46,7 +46,7 @@ class WeatherManager:
         for attempt in range(retries + 1):
 
         """
-        base_logger.internal('Attempting weather request')
+        base_logger.debug('Attempting weather request')
         weather_map = {
             'forecast': select(Forecasts),
             'current': select(Current),
@@ -74,7 +74,7 @@ class WeatherManager:
         if location is None:
             location = defaults.default_location
             if not location:
-                    user_error.error("Unable to fetch no location to query weather data from.")
+                    user_error("Unable to fetch no location to query weather data from.")
                     return send_message(False, message='no location')
         data = {}
         
@@ -83,7 +83,7 @@ class WeatherManager:
                 try:
                     API_KEY  = os.getenv('WEATHER_API_KEY') or defaults.api_key
                     if not API_KEY:
-                        base_logger.internal("[!] Missing environment variable: 'weather_api_key' aborting")
+                        base_logger.debug("[!] Missing environment variable: 'weather_api_key' aborting")
                         return send_message(False, message="Missing environment variable: 'weather_api_key'")
                     
                     url = f"https://api.weatherapi.com/v1/{query}.json"
@@ -94,13 +94,13 @@ class WeatherManager:
                     headers = {}
                     base_logger.debug(f'making {query} request for {location}')
                     async with httpx.AsyncClient(timeout=30) as client:
-                        base_logger.internal('awaiting response from client')
+                        base_logger.debug('awaiting response from client')
                         response = await client.get(url=url, params=params, headers=headers)
                         response.raise_for_status() 
                         base_logger.debug(f'weather data jsonified {data}')
                 except (ConnectTimeout, ReadTimeout, ReadError,) as e:
                     if attempt == retries:
-                        base_logger.internal(f'{type(e).__name__} error. Aborting...')
+                        base_logger.debug(f'{type(e).__name__} error. Aborting...')
                         return send_message(False, message='A server error occurred')
                     time.sleep(1)
                 except httpx.HTTPError:
@@ -113,7 +113,7 @@ class WeatherManager:
                 return send_message(False, message=f'Unable to get weather data for {location}')
             
             if 'error' in data:
-                base_logger.internal('An Httpx error occurred getting error message...')
+                base_logger.debug('An Httpx error occurred getting error message...')
                 error_info = data['error']
                 error_code = error_info.get("code", "N/A")
                 error_message = error_info.get("message", "Unknown API Error.")

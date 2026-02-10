@@ -28,10 +28,10 @@ def weather(ctx):
 def current(ctx, temp, location, clear_cache, speed):
     """Get live weather updates around you"""
     
-    base_logger.internal('Getting weather manager')
+    base_logger.debug('Getting weather manager')
     weather_manager = ctx.obj['weather_manager']
 
-    base_logger.internal('Calling make request call')
+    base_logger.debug('Calling make request call')
 
     ttl = 23456
 
@@ -43,7 +43,7 @@ def current(ctx, temp, location, clear_cache, speed):
     
 
     if not response.get('ok'):
-        base_logger.internal(f"Failed Aborting")
+        base_logger.debug(f"Failed Aborting")
         error_logger.error(message)
         return
     
@@ -62,10 +62,10 @@ def current(ctx, temp, location, clear_cache, speed):
 @click.pass_context
 def forecast(ctx, temp, location, clear_cache):
     """Get future weather update up to 7 day forecasts"""
-    base_logger.internal('Getting weather manager')
+    base_logger.debug('Getting weather manager')
     weather_manager = ctx.obj['weather_manager']
 
-    base_logger.internal('Calling make request call')
+    base_logger.debug('Calling make request call')
 
     ttl = 23456
     if clear_cache:
@@ -74,17 +74,17 @@ def forecast(ctx, temp, location, clear_cache):
     response = asyncio.run(weather_manager.make_request(location=location, retries=4, ttl=ttl))
     message = response.get('message')
     if not response.get('ok'):
-        base_logger.internal(f"Failed Aborting")
+        base_logger.debug(f"Failed Aborting")
         error_logger.error(message)
         return
     
-    base_logger.internal('getting data from response')
+    base_logger.debug('getting data from response')
     data = response.get("data")
 
-    base_logger.internal('getting table from weather forcast table')
+    base_logger.debug('getting table from weather forcast table')
     table = weather_manager.get_weather_forecast_table(data, temp)
 
-    base_logger.internal('printing table')
+    base_logger.debug('printing table')
     console.print(table)
 
     return
@@ -98,10 +98,10 @@ def forecast(ctx, temp, location, clear_cache):
 @click.pass_context
 def alerts(ctx, location, clear_cache):
     """Get alert for weather conditions around you"""
-    base_logger.internal('Getting weather manager')
+    base_logger.debug('Getting weather manager')
     weather_manager = ctx.obj['weather_manager']
 
-    base_logger.internal('Calling make request call')
+    base_logger.debug('Calling make request call')
 
     ttl = 23456
     if clear_cache:
@@ -110,18 +110,18 @@ def alerts(ctx, location, clear_cache):
     response = asyncio.run(weather_manager.make_request(query='alerts', location=location, retries=4, ttl=ttl))
     message = response.get('message')
     if not response.get('ok'):
-        base_logger.internal(f"Failed Aborting")
+        base_logger.debug(f"Failed Aborting")
         error_logger.error(message)
         return
     
-    base_logger.internal('getting data from response')
+    base_logger.debug('getting data from response')
     data = response.get("data")
 
 
-    base_logger.internal('getting table from weather forcast table')
+    base_logger.debug('getting table from weather forcast table')
     table = weather_manager.get_weather_alerts_table(data)
 
-    base_logger.internal('printing table')
+    base_logger.debug('printing table')
     console.print(table)
 
     return

@@ -1,4 +1,5 @@
 import inspect
+import json
 import asyncio
 import importlib
 
@@ -49,7 +50,7 @@ class Status(Enum):
     inactive = "in_active"
 
 class RuntimeModel(BaseModel):
-    hour: Annotated[int | None, Field(ge=1, le=23)]
+    hour: Annotated[int | None, Field(ge=0, le=23)]
     minute: Annotated[int | None, Field(ge=0, le=59)]
     second: Annotated[int | None, Field(ge=0, le=59)]
     day: Annotated[int | None, Field(ge=1, le=31)]
@@ -169,27 +170,27 @@ class Scheduler:
         )
         
         job = self.schedule_job(job, key=key.lower())
-        user_info(f"new job created! key: '{key}'")
+        return f"new job created! key: '{key}'"
 
-    def remove_job(self, key: str):
+    def remove_job(self, key: str) -> str:
         job = self.get_job(key=key)
 
         if job is None:
             raise JobNotFoundError(f"Invalid Job Key. '{key}'")
         
         job.remove()
-        user_info(f"Job with key '{key}' removed")
+        return f"Job with key '{key}' removed"
 
-    def pause_job(self, key: str):
+    def pause_job(self, key: str) -> str:
         job = self.get_job(key=key)
 
         if job is None:
             raise JobNotFoundError(f"Invalid Job Key. '{key}'")
         
         job.pause()
-        user_info(f"Job with key '{key}' paused")
+        return f"Job with key '{key}' paused"
 
-    def job_info(self, key: str | None = None, all: bool = False):
+    def job_info(self, key: str | None = None, all: bool = False) -> str:
         from theodore.core.theme import console
 
         jobs: List[Job] = []
@@ -206,19 +207,28 @@ class Scheduler:
         jobs_info = list()
 
         for job in jobs:
-            job_info = (str(job.id), str(job.next_run_time), str(job.name), job.func.__name__, str(job.kwargs), str(job.args), str(job.executor), str(job.trigger))
+            job_info = dict(
+                jid=str(job.id), 
+                next_runtime=str(job.next_run_time), 
+                job_name=str(job.name), 
+                func=job.func.__name__, 
+                kwargs=str(job.kwargs), 
+                args=str(job.args), 
+                executor=str(job.executor), 
+                trigger=str(job.trigger)
+                )
+            
             jobs_info.append(job_info)
 
-        table = get_table(jobs_info)
-        console.print(table)
+        return json.dumps(jobs_info)
 
-    def resume_job(self, key: str):
+    def resume_job(self, key: str) -> str:
         job = self.get_job(key=key)
 
         if job is None:
             raise JobNotFoundError(f"Invalid Job Key. '{key}'")
         job.resume()
-        user_info(f"Job with key '{key}' resumed")
+        return f"Job with key '{key}' resumed"
 
     def schedule_job(self, job: JOB, key: str | None= None) -> Job:
         trigger_func = __trigger_format__[job.trigger]
@@ -234,6 +244,7 @@ class Scheduler:
             user_info("Scheduler Already Running")
             return
         user_info("Scheduler Running..")
+        self._scheduler_shutdown_event.clear()
         self.scheduler.start()
         self.running = True
         await self._scheduler_shutdown_event.wait()
@@ -321,7 +332,7 @@ __trigger_format__ = {
     "interval": parse_interval
 }
 
-def get_table(jobs: list[tuple[str, str, str, str, str, str, str, str]]):
+def get_table(jobs: list[dict[str, str]]):
 
     from rich.table import Table
 
@@ -330,7 +341,7 @@ def get_table(jobs: list[tuple[str, str, str, str, str, str, str, str]]):
     table.show_lines = True
 
     table.add_column("key", justify="center", header_style="dim cyan")
-    table.add_column("nex-runtime", justify="center", header_style="dim cyan")
+    table.add_column("next-runtime", justify="center", header_style="dim cyan")
     table.add_column("name", justify="center", header_style="dim cyan")
     table.add_column("func name", justify="center", header_style="dim cyan")
     table.add_column("kwargs", justify="center", header_style="dim cyan")
@@ -338,7 +349,7 @@ def get_table(jobs: list[tuple[str, str, str, str, str, str, str, str]]):
     table.add_column("executor", justify="center", header_style="dim cyan")
     table.add_column("trigger", justify="center", header_style="dim cyan")
 
-    for (key, runtime, name, func_name, kwargs, args, executor, trigger) in jobs:
-        table.add_row(key, runtime, name, func_name, kwargs, args, executor, trigger)
+    for row in jobs:
+        table.add_row(*row.values())
     
     return table

@@ -4,6 +4,7 @@ from click_option_group import optgroup, RequiredMutuallyExclusiveOptionGroup
 
 from theodore.cli.async_click import AsyncCommand
 from theodore.core.transporter import send_command
+from theodore.core.informers import user_info
 
 class KeyValueParse(click.ParamType):
     """
@@ -60,12 +61,14 @@ def scheduler():
 @scheduler.command(cls=AsyncCommand)
 async def start_jobs():
     """Start all currently queued jobs"""
-    await send_command("START-JOBS", {})
+    msg = await send_command("START-JOBS", {})
+    user_info(msg)
 
 @scheduler.command(cls=AsyncCommand)
 async def stop_jobs():
     """Stop all job executions (running and queued)"""
-    await send_command("STOP-JOBS", {})
+    msg = await send_command("STOP-JOBS", {})
+    user_info(msg)
 
 @scheduler.command(cls=AsyncCommand)
 @optgroup.group("Required one", cls=RequiredMutuallyExclusiveOptionGroup)
@@ -73,25 +76,35 @@ async def stop_jobs():
 @optgroup.option("--all", "-a", is_flag=True)
 async def job_info(key, all):
     """List All pending Jobs"""
-    await send_command("JOB-INFO", {"key": key, "all": all})
+    from theodore.managers.scheduler import get_table
+    from theodore.core.theme import console
+    import json
+
+    data_str = await send_command("JOB-INFO", {"key": key, "all": all})
+    data = json.loads(data_str)
+    table = get_table(data)
+    console.print(table)
 
 @scheduler.command(cls=AsyncCommand)
 @click.option("--key", "-k", type=str, required=True)
 async def delete_job(key):
     """Delete / remove a job from jobstore"""
-    await send_command("REMOVE-JOB", {"key": key})
+    msg = await send_command("REMOVE-JOB", {"key": key})
+    user_info(msg)
 
 @scheduler.command(cls=AsyncCommand)
 @click.option("--key", "-k", type=str, required=True)
 async def pause_job(key):
     """set pause flag on a job (pending or already running)"""
-    await send_command("PAUSE-JOB", {"key": key})
+    msg = await send_command("PAUSE-JOB", {"key": key})
+    user_info(msg)
 
 @scheduler.command(cls=AsyncCommand)
 @click.option("--key", "-k", type=str, required=True)
 async def resume_job(key):
     """resume job flagged pause"""
-    await send_command("RESUME-JOB", {"key": key})
+    msg = await send_command("RESUME-JOB", {"key": key})
+    user_info(msg)
 
 @scheduler.command(cls=AsyncCommand)
 @click.option("--key", "-k", required=True, type=str)
@@ -122,4 +135,5 @@ async def new_job(
         "file_args": ctx.params
     }
 
-    await send_command(**package)    
+    msg = await send_command(**package)  
+    user_info(msg)  

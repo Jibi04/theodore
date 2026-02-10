@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %} Theodore Jobs {% endblock title %}
+
+{% block content %} 
+    <h1>Theodore Jobs</h1>
+    <p>
+        <input onclick="start()" name="Start Jobs" type="button" value="start jobs"/>
+    </p>
+    <p>
+        <input onclick="stop()" name="Stop Jobs" type="button" value="stop jobs"/>
+    </p>
+    
+{% endblock %}
+
+{% block scripts %}
+    <script>
+        function start(){
+            fetch("{{ url_for('start_jobs') }}", { method: "POST" })
+        }
+
+        function stop(){
+            fetch("{{ url_for('stop_jobs') }}", { method: "POST" })
+        }
+    </script>
+{% endblock %}

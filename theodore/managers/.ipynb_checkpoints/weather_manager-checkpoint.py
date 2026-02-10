@@ -37,7 +37,7 @@ class Weather_manager:
         for attempt in range(retries + 1):
 
         """
-        base_logger.internal('Attempting weather request')
+        base_logger.debug('Attempting weather request')
         cache = Cache_manager(ttl)
 
         if location is None:
@@ -62,7 +62,7 @@ class Weather_manager:
                         API_KEY  = os.getenv('weather_api_key')
 
                         if not API_KEY:
-                            base_logger.internal("[!] Missing environment variable: 'weather_api_key' aborting")
+                            base_logger.debug("[!] Missing environment variable: 'weather_api_key' aborting")
                             return send_message(False, message="Missing environment variable: 'weather_api_key'")
                         
                         url = f"https://api.weatherapi.com/v1/{query}.json"
@@ -84,7 +84,7 @@ class Weather_manager:
 
                 except (ReadTimeout, ConnectionError, ConnectTimeout) as e:
                     if attempt == retries:
-                        base_logger.internal(f'{type(e).__name__} error. Aborting...')
+                        base_logger.debug(f'{type(e).__name__} error. Aborting...')
                         # base_logger.exception(f'{type(e).__name__}: {e}')
                         return send_message(False, message='A server error occurred')
                     
@@ -92,7 +92,7 @@ class Weather_manager:
                 except requests.HTTPError:
                     break
                 except Exception as e:
-                    base_logger.internal(f'{type(e).__name__} error. Aborting...')
+                    base_logger.debug(f'{type(e).__name__} error. Aborting...')
                     # base_logger.exception(e)
                     return send_message(False, message=f'A  error occurred') 
         try:
@@ -100,12 +100,12 @@ class Weather_manager:
             data = response.json()
 
         except requests.exceptions.JSONDecodeError as e:
-                base_logger.internal("Recieved non json-Response from Server. Aborting...")
+                base_logger.debug("Recieved non json-Response from Server. Aborting...")
                 base_logger.exception(e)
                 return send_message(False, message=f"Recieved non json-Response from server {response.status_code}")
 
         if 'error' in data:
-            base_logger.internal('An error occurred getting error message...')
+            base_logger.debug('An error occurred getting error message...')
             error_info = data['error']
             error_code = error_info.get("code", "N/A")
             error_message = error_info.get("message", "Unknown API Error.")

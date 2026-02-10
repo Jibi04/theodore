@@ -32,7 +32,7 @@ async def current(ctx: click.Context, temp, location, clear_cache, speed):
     response = await WEATHER.make_request(query='forecast', location=location, retries=4)
 
     if not response.get('ok'):
-        base_logger.internal(f"Failed Aborting")
+        base_logger.debug(f"Failed Aborting")
         user_error(response.get('message'))
         return
     
@@ -49,14 +49,14 @@ async def current(ctx: click.Context, temp, location, clear_cache, speed):
 @click.pass_context
 async def forecast(ctx: click.Context, temp, location, clear_cache):
     """Get future weather update up to 7 day forecasts"""
-    base_logger.internal('Getting weather manager')
+    base_logger.debug('Getting weather manager')
     WEATHER: WeatherManagement = ctx.obj['manager']
 
-    base_logger.internal('Calling make request call')
+    base_logger.debug('Calling make request call')
 
     response = await WEATHER.make_request(query="forecast", location=location, retries=4)
     if not response.get('ok'):
-        base_logger.internal(f"Failed Aborting")
+        base_logger.debug(f"Failed Aborting")
         user_error(response.get('message'))
         return
     
@@ -75,10 +75,10 @@ async def forecast(ctx: click.Context, temp, location, clear_cache):
 @click.pass_context
 async def alerts(ctx: click.Context, location, clear_cache):
     """Get alert for weather conditions around you"""
-    base_logger.internal('Getting weather manager')
+    base_logger.debug('Getting weather manager')
     WEATHER: WeatherManagement = ctx.obj['manager']
 
-    base_logger.internal('Calling make request call')
+    base_logger.debug('Calling make request call')
     response = await WEATHER.make_request(query='alerts', location=location, retries=4)
     if not response.get('ok'):
         user_error(response.get('message'))

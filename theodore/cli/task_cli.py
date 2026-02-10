@@ -26,7 +26,7 @@ def task_manager(ctx: click.Context):
 async def new(ctx: click.Context, **kwargs):
     """Create new task"""
     from dateparser import parse
-    base_logger.internal('getting manager from task manager')
+    base_logger.debug('getting manager from task manager')
     manager: TaskManagement = ctx.obj['manager']
     args_map = kwargs
 
@@ -39,10 +39,10 @@ async def new(ctx: click.Context, **kwargs):
 
         args_map = {key: val for key, val in args_map.items() if val is not None}
         args_map.pop('remind')
-        base_logger.internal('creating new tasks ... waiting for response from manager')
+        base_logger.debug('creating new tasks ... waiting for response from manager')
         response = await manager.new_task(**args_map)
 
-        base_logger.internal('getting message from response')
+        base_logger.debug('getting message from response')
         msg = response.get('message')
 
 
@@ -50,7 +50,7 @@ async def new(ctx: click.Context, **kwargs):
             user_error(msg)
             return
         
-        base_logger.internal('getting newly created task object from manager')
+        base_logger.debug('getting newly created task object from manager')
         task = response.get('data')
 
         user_success(msg)
@@ -59,23 +59,23 @@ async def new(ctx: click.Context, **kwargs):
         user_error(f"Invalid Due date")
         return
     except SQLERROR as e:
-        base_logger.internal('A Database error occurred Aborting ...')
+        base_logger.debug('A Database error occurred Aborting ...')
         user_error(f"Database Error: {e}") 
         return
     except Exception as e:
-        base_logger.internal('An unknown error occurred Aborting ...')
+        base_logger.debug('An unknown error occurred Aborting ...')
         user_error(f"{type(e).__name__}: {e}")
         return
 
     # if remind:
-    #     base_logger.internal('user wants a scheduler')
-    #     base_logger.internal('creating scheduler ...')
+    #     base_logger.debug('user wants a scheduler')
+    #     base_logger.debug('creating scheduler ...')
     #     if not due:
     #         user_warning('Cannot set reminder without due date')
     #         due_date = click.input('Due date fmt - (yyy-mm-dd) q - quit(): ')
 
     #         if due_date.lower().strip() == 'q': 
-    #             base_logger.internal('user opted to abort shedule creation')
+    #             base_logger.debug('user opted to abort shedule creation')
     #             user_info('Aborting scheduler')
     #             return
     return
@@ -90,22 +90,22 @@ async def new(ctx: click.Context, **kwargs):
 @click.pass_context
 async def update(ctx, **kwargs):
     """Update task data id, title, tags, status, due date"""
-    base_logger.internal('loading task manager')
+    base_logger.debug('loading task manager')
     manager: TaskManagement = ctx.obj['manager']
-    base_logger.internal('updating args map')
+    base_logger.debug('updating args map')
     args_map = {key: val for key, val in kwargs.items() if val if not None}
 
     try:
-        base_logger.internal('getting client confirmation for update')
+        base_logger.debug('getting client confirmation for update')
         if not click.confirm('Are you sure you want to make this updates?', show_default=True, default=False):
-            base_logger.internal('client aborted move')
+            base_logger.debug('client aborted move')
             user_info('Aborting move')
             ctx.abort()
         
-        base_logger.internal('updating task ... waiting for response from manager')
+        base_logger.debug('updating task ... waiting for response from manager')
         response = await manager.update_task(**args_map)
 
-        base_logger.internal('getting message from response')
+        base_logger.debug('getting message from response')
         msg = response.get('message')
         if not response.get('ok'):
             user_error(msg)
@@ -114,7 +114,7 @@ async def update(ctx, **kwargs):
         user_success(msg)
         return
     except Exception as e:
-        base_logger.internal('An unknown error occurred Aborting ...')
+        base_logger.debug('An unknown error occurred Aborting ...')
         user_error(f"{type(e).__name__}: {e}")
         return
 
@@ -134,31 +134,31 @@ async def update(ctx, **kwargs):
 async def list(ctx, all, deleted, **kwargs):
     """List task(s) by filter"""
     
-    base_logger.internal('loading task manager')
+    base_logger.debug('loading task manager')
     manager: TaskManagement = ctx.obj['manager']
 
-    base_logger.internal('updating task logger')
+    base_logger.debug('updating task logger')
     args_map = kwargs
     args_map["deleted"] = deleted
     args_map["all"] = all
 
     try:
-        base_logger.internal('getting task ... waiting for response from manager')
+        base_logger.debug('getting task ... waiting for response from manager')
         response = await manager.get_tasks(**args_map)
 
         if not response.get('ok'):
             user_error(response.get('message'))
             return
         
-        base_logger.internal('getting data from response')
+        base_logger.debug('getting data from response')
         data = response.get('data')
-        base_logger.internal('getting table from')
+        base_logger.debug('getting table from')
         table = get_task_table(data, deleted)
-        base_logger.internal(f'table data created {table}')
+        base_logger.debug(f'table data created {table}')
         console.print(table )
         return
     except Exception as e:
-        base_logger.internal('An unknown error occurred Aborting ...')
+        base_logger.debug('An unknown error occurred Aborting ...')
         user_error(f"{type(e).__name__}: {e}")
         return
 
@@ -168,25 +168,25 @@ async def list(ctx, all, deleted, **kwargs):
 @click.pass_context
 async def search(ctx, keyword):
     """Search for keyword in tags and title"""
-    base_logger.internal('getting manager from ctx obj')
+    base_logger.debug('getting manager from ctx obj')
     manager: TaskManagement = ctx.obj['manager']
     try:
-        base_logger.internal('getting results from keyword search {keyword} task ... waiting for response from manager')
+        base_logger.debug('getting results from keyword search {keyword} task ... waiting for response from manager')
         response = await manager.search_tasks(keyword)
-        base_logger.internal('getting message from response')
+        base_logger.debug('getting message from response')
         msg = response.get('message')
         if not response.get('ok'):
             user_error(msg)
             return
         
-        base_logger.internal('getting data from response')
+        base_logger.debug('getting data from response')
         data = response.get('data')
-        base_logger.internal('getting table instance to display data')
+        base_logger.debug('getting table instance to display data')
         table = get_task_table(data)
         user_success(table)
         return
     except Exception as e:
-        base_logger.internal('An unknown error occurred Aborting ...')
+        base_logger.debug('An unknown error occurred Aborting ...')
         user_error(f"{type(e).__name__}: {e}")
         return
 
@@ -201,27 +201,27 @@ async def search(ctx, keyword):
 async def trash(ctx, **kwargs):
     """Move task(s) to trash"""
 
-    base_logger.internal('loading tasks manager from ctx manager')
+    base_logger.debug('loading tasks manager from ctx manager')
     manager: TaskManagement = ctx.obj['manager']
     base_logger.debug(f'Task manager loaded {manager}')
 
-    base_logger.internal('loading list ctx params')
+    base_logger.debug('loading list ctx params')
     args_map = ctx.params
     base_logger.debug(f'Ctx params loaded {args_map}')
     try:
-        base_logger.internal('confirming task move to trash')
+        base_logger.debug('confirming task move to trash')
         if not click.confirm(f'[warning]Are you sure you want to delete task?', default='n', show_default=True):
-            base_logger.internal('client aborted move')
+            base_logger.debug('client aborted move')
             user_info('Aborting move')
             ctx.abort()
 
-        base_logger.internal(f'moving to trash {args_map} ... waiting for response from manager')
+        base_logger.debug(f'moving to trash {args_map} ... waiting for response from manager')
         response = await manager.move_to_trash(**args_map)
 
-        base_logger.internal('getting message from response')
+        base_logger.debug('getting message from response')
         msg = response.get('message', 'An unknown error occurred')
     except Exception as e:
-        base_logger.internal('An unknown error occurred Aborting ...')
+        base_logger.debug('An unknown error occurred Aborting ...')
         user_error(f"{type(e).__name__}: {e}")
         return
     
@@ -242,22 +242,22 @@ async def trash(ctx, **kwargs):
 @click.pass_context
 async def delete(ctx, **kwargs):
     """Permanently delete task(s) from bin"""
-    base_logger.internal('loading tasks manager from ctx obj')
+    base_logger.debug('loading tasks manager from ctx obj')
     manager: TaskManagement = ctx.obj['manager']
     args_map = ctx.params
 
     try:
-        base_logger.internal('getting user confirmation to permanently delete')
+        base_logger.debug('getting user confirmation to permanently delete')
         if not click.confirm(f'[warning]Are you sure you want to delete task?:', default='n', show_default=True):
-            base_logger.internal('client aborted move')
+            base_logger.debug('client aborted move')
             user_info('Aborting move')
             ctx.abort()
         
-        base_logger.internal(f'deleting {args_map} ... waiting for response from manager')
+        base_logger.debug(f'deleting {args_map} ... waiting for response from manager')
         response = await manager.delete_task(**args_map)
         msg = response.get('message', 'An unknown error occurred')
     except Exception as e:
-        base_logger.internal('An unknown error occurred Aborting ...')
+        base_logger.debug('An unknown error occurred Aborting ...')
         user_error(f"{type(e).__name__}: {e}")
         return
     if not response.get('ok'):
@@ -277,7 +277,7 @@ async def delete(ctx, **kwargs):
 @click.pass_context
 async def restore(ctx, ids, **kwargs):
     """Restore task(s) from trash bin"""
-    base_logger.internal('loading tasks manager from ctx obj')
+    base_logger.debug('loading tasks manager from ctx obj')
     manager: TaskManagement = ctx.obj['manager']
     args_map = ctx.params
     try:

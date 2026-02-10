@@ -131,7 +131,7 @@ def transform_data(
             date_df_parsed = parse_dates(date_df, date_cols=date_cols, errors=date_errors)
             df_cp[date_cols] = date_df_parsed
         except (KeyError, ParserError) as e:
-            base_logger.internal(traceback.format_exc())
+            base_logger.debug(traceback.format_exc())
 
     
     cleaned_records = clean_records(df_cp)
@@ -145,13 +145,13 @@ def transform_data(
         try:
             df_cp.fillna(value=fillna, inplace=True)
         except (ValueError, TypeError):
-            base_logger.internal(traceback.format_exc())
+            base_logger.debug(traceback.format_exc())
 
     try:
         if save_to:
             fullpath = str(Path(f"{save_to}/cleaned_{filepath.name.lower()}"))
             cleaned_records.to_csv(fullpath)
-            base_logger.internal(f"{filepath.name} saved at {fullpath}")
+            base_logger.debug(f"{filepath.name} saved at {fullpath}")
     except (ValueError, TypeError):
         user_info(f"Unable to save to csv: {traceback.format_exc()}")
 

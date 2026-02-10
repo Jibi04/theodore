@@ -110,7 +110,7 @@ class Cache_manager:
         if not self.cache:
             return None
         
-        base_logger.internal('Loading cache file')
+        base_logger.debug('Loading cache file')
         key = key.lower()
         record = self.cache.get(key, None)
 
@@ -118,7 +118,7 @@ class Cache_manager:
             base_logger.debug(f'Cache manager returned {record}')
             return
 
-        base_logger.internal('filtering recent cache data')
+        base_logger.debug('filtering recent cache data')
         old_time = record['ttl_stamp']
         new_time = time.monotonic()
         time_difference = new_time - old_time

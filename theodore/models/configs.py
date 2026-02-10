@@ -13,10 +13,10 @@ ConfigTable = Table(
 
 # def create_table():
 #     try:
-#         base_logger.internal('Creating configs table')
+#         base_logger.debug('Creating configs table')
 
 #         asyncio.run(create_tables())
-#         base_logger.internal('Configs table created')
+#         base_logger.debug('Configs table created')
 #     except Exception as e:
 #         error_logger.exception(e)
 

@@ -27,7 +27,7 @@ def load_time(func):
     def wrapper(*args, **kwargs):
         start_time = time.perf_counter()
         val = func(*args, **kwargs)
-        base_logger.internal(f"{func.__name__} took {round(time.perf_counter() - start_time, 5)}s to load.")
+        base_logger.debug(f"{func.__name__} took {round(time.perf_counter() - start_time, 5)}s to load.")
         return val
     return wrapper
 
@@ -41,7 +41,7 @@ def theodore(ctx: click.Context, verbose):
 
     ctx.ensure_object(dict)
     ctx.obj["verbose"] = verbose
-    base_logger.internal("Theodore Initialized")
+    base_logger.debug("Theodore Initialized")
 
 # @click.group()
 # @click.pass_context

@@ -25,7 +25,7 @@ def config(ctx: click.Context):
 @click.argument("category", type=str)
 @click.pass_context
 def set(ctx: click.Context, default_location, api_key, default_path, category):
-    base_logger.internal('Getting option from ctx manager')
+    base_logger.debug('Getting option from ctx manager')
     DISPATCH = ctx.obj['dispatch']
     config_manager = ctx.obj['manager']
     args_map = {k: v for k, v in ctx.params.items() if v is not None}
@@ -57,7 +57,7 @@ def set(ctx: click.Context, default_location, api_key, default_path, category):
 @click.argument("category", type=str)
 @click.pass_context
 def update(ctx: click.Context, default_location, api_key, default_path, category):
-    base_logger.internal('Getting option from ctx manager')
+    base_logger.debug('Getting option from ctx manager')
     DISPATCH = ctx.obj['dispatch']
     config_manager = ctx.obj['manager']
     args_map = {k: v for k, v in ctx.params.items() if v is not None}

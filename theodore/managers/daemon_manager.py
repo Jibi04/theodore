@@ -1,15 +1,14 @@
-import asyncio, getpass, json, psutil, struct, threading, numpy, time
+import asyncio, getpass, json, psutil, struct, threading, numpy, time, inspect
 
 from pathlib import Path
 from contextlib import suppress
-from typing import Mapping
+from typing import Mapping, Any, Callable
 from datetime import datetime as dt, UTC
 from asyncio.exceptions import IncompleteReadError
 from watchdog.observers import Observer
 from watchdog.events import (
-    FileClosedEvent, FileSystemEventHandler, DirMovedEvent, 
-    FileMovedEvent, DirDeletedEvent, FileDeletedEvent, 
-    FileModifiedEvent, DirModifiedEvent
+    FileClosedEvent, FileSystemEventHandler,
+    DirDeletedEvent, FileDeletedEvent, 
     )
 
 from theodore.core.paths import SOCKET_PATH
@@ -150,20 +149,20 @@ class Worker:
 
         self._worker_shutdown_event = asyncio.Event()
         self.__cmd_registry = {
-            "STOP-PROCESSES": {"basename": "STOP-PROCESSES", "func": self.stop_processes},
-            "START-PROCESSES": {"basename": "START-PROCESS", "func": self.start_processes},
-            "RESUME": {"basename": "DownloadManager - Resume", "func": self.__downloader.resume},
-            "STOP": {"basename": "DownloadManager - Stop", "func": self.__downloader.stop_download},
-            "PAUSE": {"basename": "DownloadManager - Pause", "func": self.__downloader.pause},
-            "DOWNLOAD": {"basename": "Download Manager - Download", "func": self.__downloader.download_file},
-            "START-ETL": {"basename": "SCHEDULER", "func": organize},
-            "STOP-JOBS": {"basename": "STOP-SCHEDULER", "func": self.__scheduler.stop_jobs},
-            "START-JOBS": {"basename": "START-SCHEDULER", "func": self.__scheduler.start_jobs},
-            "PAUSE-JOB": {"basename": "SCHEDULER", "func": self.__scheduler.pause_job},
-            "RESUME-JOB": {"basename": "SCHEDULER", "func": self.__scheduler.resume_job},
-            "REMOVE-JOB": {"basename": "SCHEDULER", "func": self.__scheduler.remove_job},
-            "JOB-INFO": {"basename": "SCHEDULER", "func": self.__scheduler.job_info},
-            "NEW-JOB": {"basename": "NEW-JOB", "func": self.__scheduler.new_job}
+            "STOP-PROCESSES": {"basename": "STOP-PROCESSES", "func": self.stop_processes, "is_long_runninng": False},
+            "START-PROCESSES": {"basename": "START-PROCESS", "func": self.start_processes, "is_long_runninng": False},
+            "RESUME": {"basename": "DownloadManager - Resume", "func": self.__downloader.resume, "is_long_runninng": False},
+            "STOP": {"basename": "DownloadManager - Stop", "func": self.__downloader.stop_download, "is_long_runninng": False},
+            "PAUSE": {"basename": "DownloadManager - Pause", "func": self.__downloader.pause, "is_long_runninng": False},
+            "DOWNLOAD": {"basename": "Download", "func": self.__downloader.download_file, "is_long_running": True},
+            "START-ETL": {"basename": "SCHEDULER", "func": organize, "is_long_running": True},
+            "STOP-JOBS": {"basename": "STOP-SCHEDULER", "func": self.__scheduler.stop_jobs, "is_long_runninng": False},
+            "START-JOBS": {"basename": "START-SCHEDULER", "func": self.__scheduler.start_jobs, "is_long_runninng": False},
+            "PAUSE-JOB": {"basename": "SCHEDULER", "func": self.__scheduler.pause_job, "is_long_runninng": False},
+            "RESUME-JOB": {"basename": "SCHEDULER", "func": self.__scheduler.resume_job, "is_long_runninng": False},
+            "REMOVE-JOB": {"basename": "SCHEDULER", "func": self.__scheduler.remove_job, "is_long_runninng": False},
+            "JOB-INFO": {"basename": "SCHEDULER", "func": self.__scheduler.job_info, "is_long_runninng": False},
+            "NEW-JOB": {"basename": "NEW-JOB", "func": self.__scheduler.new_job, "is_long_runninng": False}
         }
 
     async def start_processes(self) -> None:
@@ -274,8 +273,8 @@ class Worker:
                 await writer.drain()
                 return
 
-            await self.process_cmd(cmd_register, file_args=args)
-            writer.write(f"Worker: {cmd} Initiated".encode())
+            resp: str = await self.process_cmd(cmd_register, file_args=args)
+            writer.write(resp.encode())
             await writer.drain()
         except asyncio.CancelledError:
             raise
@@ -288,32 +287,29 @@ class Worker:
                 writer.close()
                 await writer.wait_closed()
 
-    async def process_cmd(self, cmd_dict: Mapping[str, str], file_args) -> None:
+    async def process_cmd(self, cmd_dict: Mapping[str, str], file_args) -> str:
         # Kill-switch for all tasks
-        basename = cmd_dict.get("basename")
-        func = cmd_dict.get("func")
+        basename = cmd_dict.get('basename')
+        func = cmd_dict.get('func')
+        for_long_run = cmd_dict.get('is_long_running')
+
         if func is None:
             raise MissingParamArgument(f"Command Not resolved Func not understood")
 
         match basename:
             case "STOP-PROCESSES" | "STOP-SERVERS":
                 await self.stop_processes()
-                return
-            case "START-PROCESSES" | "START-SERVERS":
-                await self.start_processes()
-                return
-            case "STOP-SCHEDULER":
-                self.__scheduler.stop_jobs()
-                return
-            case "START-SCHEDULER":
-                await self.__scheduler.start_jobs()
-                return
+                return "shutdown complete."
+            
+        if not for_long_run:
+            return await wrap_and_run(func=func, **file_args)
 
         if isinstance(file_args, list):
             self.__dispatch.dispatch_many(basename=basename, func=func, func_kwargs=file_args)
-            return
+            return f"{basename}s Initiated.."
+        
         self.__dispatch.dispatch_one(basename, func, file_args)
-        return
+        return f"{basename} Initiated.."
 
 class FileEventManager(FileSystemEventHandler):
     def __init__(self, target_path: str | Path):
@@ -394,3 +390,8 @@ def get_current_metrics(interval):
         f.write(f"{cpu},{ram},{disk},{sent},{recv},{threads}\n")
 
     return
+
+async def wrap_and_run(func: Callable[[], Any], *args, **kwargs):
+    if inspect.iscoroutinefunction(func):
+        return await func(*args, **kwargs)
+    return func(*args, **kwargs)

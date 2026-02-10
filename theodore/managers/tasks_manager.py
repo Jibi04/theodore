@@ -20,31 +20,31 @@ class TaskManager():
             await self.db_manager.upsert_features(values=other_values)
             return send_message(True, message='New Task Created')
         except SQLAlchemyError as e:
-            base_logger.internal('Database Error Aborting ...')
+            base_logger.debug('Database Error Aborting ...')
             user_error(f'SQLAlchemyError: {e}')
             return send_message(False, 'Task not Created')
 
         except Exception as e:
-            base_logger.internal('An unknown error occurred Aborting ...')
+            base_logger.debug('An unknown error occurred Aborting ...')
             user_error(e)
             return send_message(False, message=f'{type(e).__name__}: {e}')
 
 
     async def update_task(self, task_id: int = None, title: str = None, description: str = None, status: str = None):
         update_values = {}
-        base_logger.internal('Validating values to be updated')
+        base_logger.debug('Validating values to be updated')
         if title: update_values['title'] = title
         if description: update_values['description'] = description
         if status: update_values['status'] = status
         if not update_values:
-            base_logger.internal('No values to update Aborting ...')
+            base_logger.debug('No values to update Aborting ...')
             return send_message(False, message='No values to update')
         
         base_logger.debug(f'Task updates to be updated {update_values}')
         try:
-            base_logger.internal('Starting connection with database')
+            base_logger.debug('Starting connection with database')
             async with get_async_session() as conn:
-                base_logger.internal('Getting task objects from db to be updated')
+                base_logger.debug('Getting task objects from db to be updated')
                 stmt = (update(TasksTable)
                         .where(
                             (TasksTable.c.task_id == task_id)&
@@ -52,33 +52,33 @@ class TaskManager():
                             )
                         .values(**update_values)
                         )
-                base_logger.internal('Updating task data in db')
+                base_logger.debug('Updating task data in db')
                 response = await conn.execute(stmt.returning(TasksTable.c.task_id, TasksTable.c.title))
                 rows = response.mappings().all()
                 if not rows:
-                    base_logger.internal('Db returned a zero row count no matching record found')
+                    base_logger.debug('Db returned a zero row count no matching record found')
                     return send_message(False, "No matching record found.")
                 base_logger.debug(f'tasks values {rows} updated')
             return send_message(True, message='TasksTable updated.')
         except SQLAlchemyError as e:
-            base_logger.internal('Database Error Aborting ...')
+            base_logger.debug('Database Error Aborting ...')
             user_error(f'SQLAlchemyError: {e}')
             return send_message(False, message='Task not updated')
         except Exception as e:
-            base_logger.internal('An unknown error occurred Aborting ...')
+            base_logger.debug('An unknown error occurred Aborting ...')
             user_error(e)
             return send_message(False, message=f'{type(e).__name__}: {e}')
 
 
     async def delete_task(self, all: bool = False, title: str = None, task_id: int = None, ids: list = None) -> dict:
-        base_logger.internal('Validating client arugments')
+        base_logger.debug('Validating client arugments')
         task_ids = normalize_ids(task_id, ids)
         if not task_ids:
             return send_message(False, messgage="unknown delete operation. no valid task id's given.")
         try:
-            base_logger.internal('Starting connection with database')
+            base_logger.debug('Starting connection with database')
             async with get_async_session() as conn:
-                base_logger.internal('Preparing delete statement')
+                base_logger.debug('Preparing delete statement')
                 stmt = delete(TasksTable).where(TasksTable.c.is_deleted.is_(True))
                 msg = 'Task(s) deleted'
                 if task_id or ids:
@@ -86,31 +86,31 @@ class TaskManager():
                                 (TasksTable.c.task_id.in_(task_ids))
                             ))
                     msg = f'deleted task(s) with ids: - {task_ids}'
-                base_logger.internal('Executing delete statement')
+                base_logger.debug('Executing delete statement')
                 response = await conn.execute(stmt)
                 if response.rowcount == 0:
-                    base_logger.internal('Db returned a zero row count no matching record found')
+                    base_logger.debug('Db returned a zero row count no matching record found')
                     return send_message(False, "No matching record found.")
                 base_logger.debug(msg)
             return send_message(True, message='Task(s) deleted')
         except SQLAlchemyError as e:
-            base_logger.internal('Database Error Aborting ...')
+            base_logger.debug('Database Error Aborting ...')
             user_error(f'SQLAlchemyError: {e}')
             return send_message(False, message='Task(s) not deleted')
 
         except Exception as e:
-            base_logger.internal('An unknown error occurred Aborting ...')
+            base_logger.debug('An unknown error occurred Aborting ...')
             user_error(e)
             return send_message(False, message=f'{type(e).__name__}: {e}')
 
 
     async def move_to_trash(self, title: str = None, task_id: int = None, ids: list = None, all=False) -> dict:
-        base_logger.internal('Validating client arugments')
+        base_logger.debug('Validating client arugments')
         task_ids = normalize_ids(task_id, ids)
         try:
-            base_logger.internal('Starting connection with database')
+            base_logger.debug('Starting connection with database')
             async with get_async_session() as conn:
-                base_logger.internal('Preparing move to trash statement')
+                base_logger.debug('Preparing move to trash statement')
                 stmt = update(TasksTable).where(TasksTable.c.is_deleted.is_(False))
                 msg = f'Trashed all tasks'
                 if all:
@@ -134,30 +134,30 @@ class TaskManager():
                                 date_deleted=datetime.now(timezone.utc))
                             )
                     msg = f'Trashed task(s) with ids {task_ids}'
-                base_logger.internal('Executing move to trash statement')
+                base_logger.debug('Executing move to trash statement')
                 response = await conn.execute(stmt)
                 if response.rowcount == 0:
-                    base_logger.internal('Db returned a zero row count no matching record found')
+                    base_logger.debug('Db returned a zero row count no matching record found')
                     return send_message(False, message="No matching record found.")
                 base_logger.debug(msg)
             return send_message(True, message='Task(s) moved to trash')
         except SQLAlchemyError as e:
-            base_logger.internal('Database Error Aborting ...')
+            base_logger.debug('Database Error Aborting ...')
             user_error(f'SQLAlchemyError: {e}')
             return send_message(False, message='Task(s) not trashed')
         except Exception as e:
-            base_logger.internal('An unknown error occurred Aborting ...')
+            base_logger.debug('An unknown error occurred Aborting ...')
             user_error(e)
             return send_message(False, message=f'{type(e).__name__}: {e}')
         
 
     async def restore_from_trash(self, task_id: int = None, ids: list = None, all=False) -> dict:
-        base_logger.internal('Validating client arugments')
+        base_logger.debug('Validating client arugments')
         task_ids = normalize_ids(task_id, ids)
         try:
-            base_logger.internal('Starting connection with database')
+            base_logger.debug('Starting connection with database')
             async with get_async_session() as conn:
-                base_logger.internal('Preparing restore statement')
+                base_logger.debug('Preparing restore statement')
                 stmt = update(TasksTable).where(TasksTable.c.is_deleted.is_(True))
                 if all:
                     stmt = (stmt
@@ -174,20 +174,20 @@ class TaskManager():
                                 date_deleted=datetime.now(timezone.utc)
                                 )
                             )
-                base_logger.internal('Executing restore statement')
+                base_logger.debug('Executing restore statement')
                 result = await conn.execute(stmt)
                 if result.rowcount == 0:
-                    base_logger.internal('Db returned a zero row count no matching record found')
+                    base_logger.debug('Db returned a zero row count no matching record found')
                     return send_message(False, message='No matching record found')
                 base_logger.debug(f'Moved task(s) with ids {task_ids} restored')
             return send_message(True, message='Task(s) restored')
         except SQLAlchemyError as e:
-            base_logger.internal('Database Error Aborting ...')
+            base_logger.debug('Database Error Aborting ...')
             user_error(f'SQLAlchemyError: {e}')
             return send_message(False, message='Task(s) not restored')
 
         except Exception as e:
-            base_logger.internal('An unknown error occurred Aborting ...')
+            base_logger.debug('An unknown error occurred Aborting ...')
             user_error(e)
             return send_message(False, message=f'{type(e).__name__}: {e}')
 
@@ -195,30 +195,30 @@ class TaskManager():
     async def search_tasks(self, keyword) -> dict: 
         try:
             async with get_async_session() as conn:
-                base_logger.internal('Creating search statement')
+                base_logger.debug('Creating search statement')
                 stmt = (select(TasksTable)
                         .where(
                             (TasksTable.c.title.ilike(f'%{keyword}%')) |
                             (TasksTable.c.description.ilike(f'%{keyword}%'))
                             ))
-                base_logger.internal('Executing search statement')
+                base_logger.debug('Executing search statement')
                 result = await conn.execute(stmt)
                 rows = result.fetchall()
                 if not rows:
-                    base_logger.internal('Db returned a zero row count no matching record found')
+                    base_logger.debug('Db returned a zero row count no matching record found')
                     return send_message(False, message="No matching record found.")
                 
-                base_logger.internal('Converting db response objects into dictionary objects')
+                base_logger.debug('Converting db response objects into dictionary objects')
                 rows_dict = rows.mappings().all()
                 base_logger.debug(f'Converted db response to dict objects {rows_dict}')
 
                 return send_message(True, data=rows_dict)
         except SQLAlchemyError as e:
-            base_logger.internal('Database Error Aborting ...')
+            base_logger.debug('Database Error Aborting ...')
             user_error(f'SQLAlchemyError: {e}')
             return send_message(False, message='Task(s) not restored')
         except Exception as e:
-            base_logger.internal('An unknown error occurred Aborting ...')
+            base_logger.debug('An unknown error occurred Aborting ...')
             user_error(e)
             return send_message(False, message=f'{type(e).__name__}: {e}')
 
@@ -227,8 +227,8 @@ class TaskManager():
         task_ids = normalize_ids(task_id, ids)
         try:
             async with get_async_session() as conn:
-                base_logger.internal('Preparing list query')
-                base_logger.internal('Applying list filters')
+                base_logger.debug('Preparing list query')
+                base_logger.debug('Applying list filters')
                 if deleted:
                     query = select(TasksTable).where(TasksTable.c.is_deleted.is_(True))
                 else:
@@ -238,7 +238,7 @@ class TaskManager():
                     query = query.where(TasksTable.c.status == status)
 
                 # Handle date filters
-                base_logger.internal('Applying date filters')
+                base_logger.debug('Applying date filters')
                 date_filters = {
                     "created_before": (date_args.get('created_before'), TasksTable.c.date_created, '<'),
                     "created_after": (date_args.get('created_after'), TasksTable.c.date_created, '>'),
@@ -260,24 +260,24 @@ class TaskManager():
                             query = query.where(column > parsed_date)
                         else:  # ==
                             query = query.where(column == parsed_date)
-                base_logger.internal('Executing list query ...')
+                base_logger.debug('Executing list query ...')
                 response = await conn.execute(query)
                 base_logger.debug(f'Executed list query')
 
-                base_logger.internal('Converting db response into dictionary objects')
+                base_logger.debug('Converting db response into dictionary objects')
                 rows = response.mappings().all()
                 if not rows:
-                    base_logger.internal('Db returned a zero row count no matching record found')
+                    base_logger.debug('Db returned a zero row count no matching record found')
                     return send_message(False, "No matching record found.")
                 data = rows
                 base_logger.debug(f'Converted db response to dict objects: {data}')
                 return send_message(True, data=data)
         except SQLAlchemyError as e:
-            base_logger.internal('Database Error Aborting ...')
+            base_logger.debug('Database Error Aborting ...')
             user_error(f'SQLAlchemyError: {e}')
             return send_message(False, 'Unable to process Database Error')
         except Exception as e:
-            base_logger.internal('An unknown error occurred Aborting ...')
+            base_logger.debug('An unknown error occurred Aborting ...')
             user_error(e)
             return send_message(False, message=f'{type(e).__name__}: {e}')
         
